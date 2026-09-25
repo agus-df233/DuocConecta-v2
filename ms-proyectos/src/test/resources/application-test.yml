@@ -37,6 +37,10 @@ spring:
           jwk-set-uri: http://localhost:0/.well-known/jwks.json
 
 duocconecta:
+  # Los tests no publican en SNS: los eventos solo se registran.
+  mensajeria:
+    habilitada: false
+    origen: ms-proyectos
   seguridad:
     audiencia: audiencia-de-prueba
     dominios:

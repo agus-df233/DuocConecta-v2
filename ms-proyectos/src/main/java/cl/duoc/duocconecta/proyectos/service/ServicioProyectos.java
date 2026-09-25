@@ -1,5 +1,7 @@
 package cl.duoc.duocconecta.proyectos.service;
 
+import cl.duoc.duocconecta.comun.eventos.EventoDuocConecta;
+import cl.duoc.duocconecta.comun.eventos.TiposDeEvento;
 import cl.duoc.duocconecta.proyectos.domain.Adjunto;
 import cl.duoc.duocconecta.proyectos.domain.Proyecto;
 import cl.duoc.duocconecta.proyectos.domain.Visibilidad;
@@ -13,6 +15,7 @@ import cl.duoc.duocconecta.proyectos.repository.RepositorioComentarios;
 import cl.duoc.duocconecta.proyectos.repository.RepositorioProyectos;
 import cl.duoc.duocconecta.proyectos.dto.ProyectoRespuesta;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,9 +39,10 @@ public class ServicioProyectos {
     private final RepositorioProyectos repositorioProyectos;
     private final RepositorioComentarios repositorioComentarios;
     private final ServicioAdjuntos servicioAdjuntos;
+    private final ApplicationEventPublisher eventos;
 
-    /** A DTO, con la cuenta de comentarios. */
-    private ProyectoRespuesta aRespuesta(Proyecto proyecto) {
+    /** A DTO, con la cuenta de comentarios. La moderación lo reutiliza. */
+    ProyectoRespuesta aRespuesta(Proyecto proyecto) {
         return ProyectoRespuesta.desdeEntidad(
                 proyecto, repositorioComentarios.countByProyectoId(proyecto.getId()),
                 servicioAdjuntos::urlPublica);
@@ -107,7 +111,9 @@ public class ServicioProyectos {
                 .herramientas(dto.herramientas() != null ? dto.herramientas() : List.of())
                 .build();
         sincronizarAdjuntos(repo, dto.adjuntos());
-        return aRespuesta(repositorioProyectos.save(repo));
+        Proyecto guardado = repositorioProyectos.save(repo);
+        publicar(TiposDeEvento.PROYECTO_PUBLICADO, propietarioId, null, guardado);
+        return aRespuesta(guardado);
     }
 
     /**
@@ -116,10 +122,10 @@ public class ServicioProyectos {
      */
     @Transactional(readOnly = true)
     public List<ProyectoRespuesta> listarVisiblesPara(String usuarioId) {
-        List<Proyecto> publicos = repositorioProyectos.findByVisibilidad(Visibilidad.PUBLICO);
+        List<Proyecto> publicos = repositorioProyectos.findByVisibilidadAndOcultoFalse(Visibilidad.PUBLICO);
         List<Proyecto> propios = repositorioProyectos.findByPropietarioId(usuarioId);
         List<Proyecto> compartidosConmigo = repositorioProyectos
-                .findByVisibilidadAndColaboradoresIdsContaining(Visibilidad.COMPARTIDO, usuarioId);
+                .findByVisibilidadAndColaboradoresIdsContainingAndOcultoFalse(Visibilidad.COMPARTIDO, usuarioId);
 
         return Stream.of(publicos, propios, compartidosConmigo)
                 .flatMap(List::stream)
@@ -163,7 +169,10 @@ public class ServicioProyectos {
             proyecto.getHerramientas().addAll(dto.herramientas());
         }
         sincronizarAdjuntos(proyecto, dto.adjuntos());
-        return aRespuesta(repositorioProyectos.save(proyecto));
+        // Los campos de moderación no se tocan: la dueña no puede revertir un ocultamiento.
+        Proyecto guardado = repositorioProyectos.save(proyecto);
+        publicar(TiposDeEvento.PROYECTO_ACTUALIZADO, usuarioId, null, guardado);
+        return aRespuesta(guardado);
     }
 
     @Transactional
@@ -177,10 +186,15 @@ public class ServicioProyectos {
         if (repo.getVisibilidad() != Visibilidad.COMPARTIDO) {
             throw new OperacionNoPermitidaException("Solo se pueden agregar colaboradores a proyectos compartidos");
         }
-        if (!repo.getColaboradoresIds().contains(nuevoColaboradorId)) {
+        boolean esNuevo = !repo.getColaboradoresIds().contains(nuevoColaboradorId);
+        if (esNuevo) {
             repo.getColaboradoresIds().add(nuevoColaboradorId);
         }
-        return aRespuesta(repositorioProyectos.save(repo));
+        Proyecto guardado = repositorioProyectos.save(repo);
+        if (esNuevo) {
+            publicar(TiposDeEvento.PROYECTO_COLABORADOR_AGREGADO, usuarioId, nuevoColaboradorId, guardado);
+        }
+        return aRespuesta(guardado);
     }
 
     @Transactional
@@ -191,9 +205,21 @@ public class ServicioProyectos {
         if (!repo.getPropietarioId().equals(usuarioId)) {
             throw new OperacionNoPermitidaException("Solo el propietario puede eliminar este proyecto");
         }
+        borrar(repo);
+        publicar(TiposDeEvento.PROYECTO_ELIMINADO, usuarioId, null, repo);
+    }
+
+    /** Borra el proyecto y sus archivos. La moderación lo reutiliza sin la regla de dueño. */
+    void borrar(Proyecto proyecto) {
         // Los archivos no se van solos con la fila: hay que sacarlos del bucket.
-        repo.getAdjuntos().stream().filter(Adjunto::esArchivoSubido)
+        proyecto.getAdjuntos().stream().filter(Adjunto::esArchivoSubido)
                 .forEach(a -> servicioAdjuntos.borrar(a.getClaveS3()));
-        repositorioProyectos.delete(repo);
+        repositorioProyectos.delete(proyecto);
+    }
+
+    /** El evento sale después del commit (ver {@code PublicacionTrasConfirmar}). */
+    private void publicar(String tipo, String actorId, String destinatarioId, Proyecto proyecto) {
+        String id = proyecto.getId().toString();
+        eventos.publishEvent(EventoDuocConecta.nuevo(tipo, actorId, destinatarioId, id, id, null));
     }
 }

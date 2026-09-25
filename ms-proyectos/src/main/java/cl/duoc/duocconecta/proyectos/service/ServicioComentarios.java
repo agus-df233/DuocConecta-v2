@@ -1,5 +1,7 @@
 package cl.duoc.duocconecta.proyectos.service;
 
+import cl.duoc.duocconecta.comun.eventos.EventoDuocConecta;
+import cl.duoc.duocconecta.comun.eventos.TiposDeEvento;
 import cl.duoc.duocconecta.proyectos.domain.Comentario;
 import cl.duoc.duocconecta.proyectos.domain.Proyecto;
 import cl.duoc.duocconecta.proyectos.dto.ComentarioDatos;
@@ -11,6 +13,7 @@ import cl.duoc.duocconecta.proyectos.repository.RepositorioProyectos;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +29,7 @@ public class ServicioComentarios {
 
     private final RepositorioComentarios repositorioComentarios;
     private final RepositorioProyectos repositorioProyectos;
+    private final ApplicationEventPublisher eventos;
 
     /** El hilo completo, del más antiguo al más nuevo. */
     @Transactional(readOnly = true)
@@ -39,7 +43,7 @@ public class ServicioComentarios {
     /** Comentar no comparte ningún dato de contacto. */
     @Transactional
     public ComentarioRespuesta crear(UUID proyectoId, ComentarioDatos dto, String usuarioId) {
-        exigirAcceso(proyectoId, usuarioId);
+        Proyecto proyecto = exigirAcceso(proyectoId, usuarioId);
 
         Comentario comentario = Comentario.builder()
                 .proyectoId(proyectoId)
@@ -47,16 +51,21 @@ public class ServicioComentarios {
                 .texto(dto.texto().trim())
                 .build();
 
-        return ComentarioRespuesta.desdeEntidad(repositorioComentarios.save(comentario));
+        Comentario guardado = repositorioComentarios.save(comentario);
+        // Se avisa a la dueña del proyecto; si comenta ella misma, el consumidor no se avisa a sí mismo.
+        eventos.publishEvent(EventoDuocConecta.nuevo(TiposDeEvento.PROYECTO_COMENTADO, usuarioId,
+                proyecto.getPropietarioId(), guardado.getId().toString(), proyectoId.toString(), null));
+        return ComentarioRespuesta.desdeEntidad(guardado);
     }
 
-    /** El proyecto existe y la persona puede verlo. */
-    private void exigirAcceso(UUID proyectoId, String usuarioId) {
+    /** El proyecto existe y la persona puede verlo. Un proyecto oculto solo lo ve su dueña. */
+    private Proyecto exigirAcceso(UUID proyectoId, String usuarioId) {
         Proyecto proyecto = repositorioProyectos.findById(proyectoId)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Proyecto no encontrado: " + proyectoId));
 
         if (!proyecto.esVisiblePara(usuarioId)) {
             throw new OperacionNoPermitidaException("No tienes acceso a este proyecto");
         }
+        return proyecto;
     }
 }

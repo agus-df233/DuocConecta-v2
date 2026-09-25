@@ -33,11 +33,19 @@ public record EventoDuocConecta(
 
     public static final int VERSION_ACTUAL = 1;
 
-    /** El identificador, la versión y la fecha los pone quien publica, no quien llama. */
-    public static EventoDuocConecta nuevo(String tipo, String origen, String actorId,
-                                          String destinatarioId, String recursoId,
-                                          String proyectoId, String detalle) {
-        return new EventoDuocConecta(UUID.randomUUID().toString(), tipo, VERSION_ACTUAL, origen,
+    /**
+     * Un evento recién ocurrido. El identificador, la versión y la fecha no los elige quien llama,
+     * y el origen lo completa el publicador desde {@code duocconecta.mensajeria.origen}.
+     */
+    public static EventoDuocConecta nuevo(String tipo, String actorId, String destinatarioId,
+                                          String recursoId, String proyectoId, String detalle) {
+        return new EventoDuocConecta(UUID.randomUUID().toString(), tipo, VERSION_ACTUAL, null,
                 Instant.now(), actorId, destinatarioId, recursoId, proyectoId, detalle);
+    }
+
+    /** Copia con el servicio de origen puesto. */
+    public EventoDuocConecta conOrigen(String nuevoOrigen) {
+        return new EventoDuocConecta(idEvento, tipo, version, nuevoOrigen, ocurridoEn, actorId,
+                destinatarioId, recursoId, proyectoId, detalle);
     }
 }

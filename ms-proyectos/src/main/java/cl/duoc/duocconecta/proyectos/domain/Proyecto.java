@@ -80,18 +80,54 @@ public class Proyecto {
     @Column(name = "fecha_creacion", nullable = false, updatable = false)
     private Instant fechaCreacion;
 
+    /**
+     * Oculto por moderación. Es aparte de {@code visibilidad}: esa la elige la dueña, esta solo
+     * la cambia el administrador, y la dueña no puede revertirla con un PUT.
+     */
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean oculto = false;
+
+    @Column(name = "motivo_ocultamiento", length = 500)
+    private String motivoOcultamiento;
+
+    /** {@code oid} del administrador que lo ocultó. */
+    @Column(name = "ocultado_por", length = 100)
+    private String ocultadoPor;
+
+    @Column(name = "ocultado_en")
+    private Instant ocultadoEn;
+
     @PrePersist
     void alPersistir() {
         this.fechaCreacion = Instant.now();
     }
 
     /** Añade un adjunto y deja las dos puntas de la relación apuntándose. */
+    public void ocultar(String motivo, String administradorId) {
+        this.oculto = true;
+        this.motivoOcultamiento = motivo;
+        this.ocultadoPor = administradorId;
+        this.ocultadoEn = Instant.now();
+    }
+
+    public void mostrar() {
+        this.oculto = false;
+        this.motivoOcultamiento = null;
+        this.ocultadoPor = null;
+        this.ocultadoEn = null;
+    }
+
     public void agregarAdjunto(Adjunto adjunto) {
         adjunto.setProyecto(this);
         this.adjuntos.add(adjunto);
     }
 
+    /** Un proyecto oculto por moderación solo lo ve su dueña, sin importar la visibilidad. */
     public boolean esVisiblePara(String usuarioId) {
+        if (oculto) {
+            return propietarioId.equals(usuarioId);
+        }
         if (visibilidad == Visibilidad.PUBLICO) {
             return true;
         }

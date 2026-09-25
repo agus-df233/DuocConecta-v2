@@ -27,7 +27,7 @@ class PublicacionDeEventosTest {
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
     private static EventoDuocConecta evento() {
-        return EventoDuocConecta.nuevo(TiposDeEvento.COLABORACION_ACEPTADA, "ms-contacto",
+        return EventoDuocConecta.nuevo(TiposDeEvento.COLABORACION_ACEPTADA,
                 "oid-actor", "oid-destino", "solicitud-1", "proyecto-1", null);
     }
 
@@ -35,6 +35,7 @@ class PublicacionDeEventosTest {
         PropiedadesMensajeria propiedades = new PropiedadesMensajeria();
         propiedades.setHabilitada(habilitada);
         propiedades.getTopico().setArn(arn);
+        propiedades.setOrigen("ms-contacto");
         return propiedades;
     }
 

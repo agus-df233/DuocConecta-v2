@@ -13,4 +13,7 @@ public interface RepositorioComentarios extends JpaRepository<Comentario, UUID> 
 
     /** Cuántos comentarios tiene un proyecto; la tarjeta de la vitrina lo muestra. */
     long countByProyectoId(UUID proyectoId);
+
+    /** Los más recientes de toda la plataforma, para moderar. */
+    List<Comentario> findTop50ByOrderByFechaDesc();
 }

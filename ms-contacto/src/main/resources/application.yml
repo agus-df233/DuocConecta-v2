@@ -44,6 +44,17 @@ spring:
           issuer-uri: https://login.microsoftonline.com/${AZURE_TENANT_ID}/v2.0
 
 duocconecta:
+  # Mensajería (EP2). Los nombres viven solo aquí: el código no escribe ninguno a mano.
+  mensajeria:
+    # En falso los eventos solo se registran en el log (tests, o trabajar sin AWS).
+    habilitada: ${MENSAJERIA_HABILITADA:true}
+    region: ${AWS_REGION:us-east-1}
+    origen: ${spring.application.name}
+    topico:
+      nombre: ${SNS_TOPICO_EVENTOS:duocconecta-eventos}
+      # Vacío = no se publica. Lo inyecta la task definition; en local va en .env.
+      arn: ${SNS_TOPICO_EVENTOS_ARN:}
+
   seguridad:
     # Client-id del registro de la API en Azure AD. Es la audiencia que debe traer el token.
     audiencia: ${AZURE_CLIENT_ID}

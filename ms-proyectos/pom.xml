@@ -25,6 +25,12 @@
             <artifactId>common-seguridad</artifactId>
         </dependency>
 
+        <!-- Publicación de eventos en SNS (EP2). -->
+        <dependency>
+            <groupId>cl.duoc.duocconecta</groupId>
+            <artifactId>common-eventos</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>

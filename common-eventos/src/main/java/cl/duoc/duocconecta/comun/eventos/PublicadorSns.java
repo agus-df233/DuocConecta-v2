@@ -31,7 +31,9 @@ public class PublicadorSns implements PublicadorEventos {
     }
 
     @Override
-    public void publicar(EventoDuocConecta evento) {
+    public void publicar(EventoDuocConecta eventoDelNegocio) {
+        EventoDuocConecta evento = eventoDelNegocio.origen() != null
+                ? eventoDelNegocio : eventoDelNegocio.conOrigen(propiedades.getOrigen());
         String arn = propiedades.getTopico().getArn();
         if (!propiedades.isHabilitada() || arn == null || arn.isBlank()) {
             log.info("Mensajería deshabilitada: evento {} '{}' solo se registra", evento.idEvento(), evento.tipo());

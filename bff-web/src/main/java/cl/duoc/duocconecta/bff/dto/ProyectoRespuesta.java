@@ -29,12 +29,16 @@ public record ProyectoRespuesta(
         List<String> colaboradoresIds,
         List<AdjuntoRespuesta> adjuntos,
         long cantidadComentarios,
-        Instant fechaCreacion) {
+        Instant fechaCreacion,
+        @Schema(description = "Oculto por moderación; solo lo ven su dueña y el administrador")
+        boolean oculto,
+        @Schema(description = "Motivo del ocultamiento, para mostrárselo a la dueña")
+        String motivoOcultamiento) {
 
     /** Copia el proyecto sumándole los datos de quien lo publicó. */
     public ProyectoRespuesta conAutor(Autor quienPublico) {
         return new ProyectoRespuesta(id, nombre, resumen, descripcion, urlRepositorio, propietarioId,
                 quienPublico, sede, herramientas, estado, visibilidad, colaboradoresIds,
-                adjuntos, cantidadComentarios, fechaCreacion);
+                adjuntos, cantidadComentarios, fechaCreacion, oculto, motivoOcultamiento);
     }
 }

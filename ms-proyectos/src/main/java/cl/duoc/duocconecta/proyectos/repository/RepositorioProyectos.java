@@ -9,9 +9,10 @@ import java.util.UUID;
 
 public interface RepositorioProyectos extends JpaRepository<Proyecto, UUID> {
 
-    List<Proyecto> findByVisibilidad(Visibilidad visibilidad);
+    /** Los de la vitrina: excluye los ocultos por moderación. */
+    List<Proyecto> findByVisibilidadAndOcultoFalse(Visibilidad visibilidad);
 
     List<Proyecto> findByPropietarioId(String propietarioId);
 
-    List<Proyecto> findByVisibilidadAndColaboradoresIdsContaining(Visibilidad visibilidad, String usuarioId);
+    List<Proyecto> findByVisibilidadAndColaboradoresIdsContainingAndOcultoFalse(Visibilidad visibilidad, String usuarioId);
 }

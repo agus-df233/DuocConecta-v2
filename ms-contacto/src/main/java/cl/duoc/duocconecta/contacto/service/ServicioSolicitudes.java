@@ -1,5 +1,7 @@
 package cl.duoc.duocconecta.contacto.service;
 
+import cl.duoc.duocconecta.comun.eventos.EventoDuocConecta;
+import cl.duoc.duocconecta.comun.eventos.TiposDeEvento;
 import cl.duoc.duocconecta.contacto.domain.EstadoSolicitud;
 import cl.duoc.duocconecta.contacto.domain.SolicitudContacto;
 import cl.duoc.duocconecta.contacto.dto.DatosDeContacto;
@@ -15,6 +17,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ServicioSolicitudes {
 
     private final RepositorioSolicitudes repositorioSolicitudes;
+    private final ApplicationEventPublisher eventos;
 
     /** Ni a uno mismo, ni dos vivas por el mismo proyecto: la bandeja no se debe poder inundar. */
     @Transactional
@@ -61,9 +65,12 @@ public class ServicioSolicitudes {
                 .redesSolicitante(mios.redes())
                 .build();
 
-        // TODO (EP3): publicar el evento "solicitud.creada" para avisar por correo.
-        // Hoy el destinatario se entera consultando GET /api/v1/colaboraciones/recibidas.
-        return SolicitudRespuesta.desdeEntidad(repositorioSolicitudes.save(solicitud));
+        SolicitudContacto guardada = repositorioSolicitudes.save(solicitud);
+        // Se publica tras el commit: quien la recibe se entera sin tener que revisar su bandeja.
+        eventos.publishEvent(EventoDuocConecta.nuevo(TiposDeEvento.COLABORACION_SOLICITADA,
+                solicitanteId, dto.solicitadoId(), guardada.getId().toString(),
+                textoONulo(dto.proyectoId()), null));
+        return SolicitudRespuesta.desdeEntidad(guardada);
     }
 
     /**
@@ -93,7 +100,16 @@ public class ServicioSolicitudes {
         }
         solicitud.setFechaRespuesta(Instant.now());
 
-        return SolicitudRespuesta.desdeEntidad(repositorioSolicitudes.save(solicitud));
+        SolicitudContacto guardada = repositorioSolicitudes.save(solicitud);
+        eventos.publishEvent(EventoDuocConecta.nuevo(
+                respuesta.aceptar() ? TiposDeEvento.COLABORACION_ACEPTADA : TiposDeEvento.COLABORACION_RECHAZADA,
+                usuarioId, guardada.getSolicitanteId(), guardada.getId().toString(),
+                textoONulo(guardada.getProyectoId()), null));
+        return SolicitudRespuesta.desdeEntidad(guardada);
+    }
+
+    private static String textoONulo(UUID id) {
+        return id == null ? null : id.toString();
     }
 
     /** Solicitudes que le llegaron a esta persona, de la más reciente a la más antigua. */
