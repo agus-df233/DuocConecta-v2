@@ -1,11 +1,15 @@
 {
   "_comentario": [
-    "Task definition única de DuocConecta: los cuatro servicios corren como contenedores de UNA misma",
+    "Task definition única de DuocConecta: los seis servicios corren como contenedores de UNA misma",
     "tarea de Fargate. Se hace así porque AWS Cloud Map no está habilitado en el Learner Lab y sin",
     "él no hay descubrimiento de servicios; al compartir tarea, los contenedores comparten interfaz",
     "de red y el BFF llega a los microservicios por http://localhost:8081, :8082 y :8083.",
     "",
-    "Cada contenedor lleva un tope de memoria propio: con cuatro JVM en la misma tarea, sin topes",
+    "EP2: ms-notificaciones (8084) consume las colas SQS y ms-mensajeria (8085) las administra.",
+    "ms-proyectos y ms-contacto publican en el tópico SNS; su ARN llega en SNS_TOPICO_EVENTOS_ARN.",
+    "Las credenciales de AWS salen de LabRole (taskRoleArn): no hay claves en variables.",
+    "",
+    "Cada contenedor lleva un tope de memoria propio: con seis JVM en la misma tarea, sin topes",
     "la primera en arrancar se queda con casi toda la RAM y las demás mueren por falta de memoria.",
     "El heap lo acota la propia imagen con MaxRAMPercentage, así que acá no se repite.",
     "",
@@ -19,7 +23,7 @@
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "2048",
-  "memory": "4096",
+  "memory": "6144",
   "executionRoleArn": "arn:aws:iam::__ACCOUNT_ID__:role/LabRole",
   "taskRoleArn": "arn:aws:iam::__ACCOUNT_ID__:role/LabRole",
   "containerDefinitions": [
@@ -104,7 +108,9 @@
         { "name": "DB_URL", "value": "jdbc:postgresql://__RDS_ENDPOINT__:5432/duocconecta" },
         { "name": "DB_USER", "value": "duocconecta" },
         { "name": "S3_BUCKET_ADJUNTOS", "value": "__BUCKET_ADJUNTOS__" },
-        { "name": "AWS_REGION", "value": "__REGION__" }
+        { "name": "AWS_REGION", "value": "__REGION__" },
+        { "name": "SNS_TOPICO_EVENTOS_ARN", "value": "__TOPICO_EVENTOS_ARN__" },
+        { "name": "ADMINISTRADORES", "value": "__ADMINISTRADORES__" }
       ],
       "secrets": [
         { "name": "DB_PASSWORD", "valueFrom": "__SECRETO_DB_ARN__:password::" }
@@ -137,7 +143,9 @@
         { "name": "LOG_NIVEL", "value": "__LOG_NIVEL__" },
         { "name": "AZURE_CLIENT_ID", "value": "__AZURE_CLIENT_ID__" },
         { "name": "DB_URL", "value": "jdbc:postgresql://__RDS_ENDPOINT__:5432/duocconecta" },
-        { "name": "DB_USER", "value": "duocconecta" }
+        { "name": "DB_USER", "value": "duocconecta" },
+        { "name": "AWS_REGION", "value": "__REGION__" },
+        { "name": "SNS_TOPICO_EVENTOS_ARN", "value": "__TOPICO_EVENTOS_ARN__" }
       ],
       "secrets": [
         { "name": "DB_PASSWORD", "valueFrom": "__SECRETO_DB_ARN__:password::" }
@@ -153,6 +161,71 @@
       },
       "healthCheck": {
         "command": ["CMD-SHELL", "wget -q -O - http://localhost:8083/actuator/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 90
+      }
+    },
+    {
+      "name": "ms-notificaciones",
+      "image": "__REGISTRO__/duocconecta/ms-notificaciones:__TAG__",
+      "essential": true,
+      "memory": 1024,
+      "portMappings": [{ "containerPort": 8084, "protocol": "tcp" }],
+      "environment": [
+        { "name": "AZURE_TENANT_ID", "value": "__AZURE_TENANT_ID__" },
+        { "name": "LOG_NIVEL", "value": "__LOG_NIVEL__" },
+        { "name": "AZURE_CLIENT_ID", "value": "__AZURE_CLIENT_ID__" },
+        { "name": "DB_URL", "value": "jdbc:postgresql://__RDS_ENDPOINT__:5432/duocconecta" },
+        { "name": "DB_USER", "value": "duocconecta" },
+        { "name": "AWS_REGION", "value": "__REGION__" },
+        { "name": "ADMINISTRADORES", "value": "__ADMINISTRADORES__" }
+      ],
+      "secrets": [
+        { "name": "DB_PASSWORD", "valueFrom": "__SECRETO_DB_ARN__:password::" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/duocconecta",
+          "awslogs-region": "__REGION__",
+          "awslogs-stream-prefix": "ms-notificaciones",
+          "awslogs-create-group": "true"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget -q -O - http://localhost:8084/actuator/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 90
+      }
+    },
+    {
+      "name": "ms-mensajeria",
+      "image": "__REGISTRO__/duocconecta/ms-mensajeria:__TAG__",
+      "essential": true,
+      "memory": 768,
+      "portMappings": [{ "containerPort": 8085, "protocol": "tcp" }],
+      "environment": [
+        { "name": "AZURE_TENANT_ID", "value": "__AZURE_TENANT_ID__" },
+        { "name": "LOG_NIVEL", "value": "__LOG_NIVEL__" },
+        { "name": "AZURE_CLIENT_ID", "value": "__AZURE_CLIENT_ID__" },
+        { "name": "AWS_REGION", "value": "__REGION__" },
+        { "name": "ADMINISTRADORES", "value": "__ADMINISTRADORES__" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/duocconecta",
+          "awslogs-region": "__REGION__",
+          "awslogs-stream-prefix": "ms-mensajeria",
+          "awslogs-create-group": "true"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget -q -O - http://localhost:8085/actuator/health || exit 1"],
         "interval": 30,
         "timeout": 5,
         "retries": 3,

@@ -21,14 +21,18 @@ WORKDIR /build
 # falla si un <module> declarado no está en el contexto, aunque no se vaya a construir.
 COPY pom.xml .
 COPY common-seguridad/pom.xml common-seguridad/
+COPY common-eventos/pom.xml   common-eventos/
 COPY ms-usuarios/pom.xml      ms-usuarios/
 COPY ms-proyectos/pom.xml     ms-proyectos/
 COPY ms-contacto/pom.xml      ms-contacto/
+COPY ms-notificaciones/pom.xml ms-notificaciones/
+COPY ms-mensajeria/pom.xml    ms-mensajeria/
 COPY bff-web/pom.xml          bff-web/
-RUN mvn -q -B dependency:go-offline -pl common-seguridad,ms-usuarios,ms-proyectos,ms-contacto,bff-web || true
+RUN mvn -q -B dependency:go-offline -pl common-seguridad,common-eventos,ms-usuarios,ms-proyectos,ms-contacto,ms-notificaciones,ms-mensajeria,bff-web || true
 
 # Ahora el código y la compilación real del servicio pedido.
 COPY common-seguridad common-seguridad
+COPY common-eventos common-eventos
 COPY ${SERVICIO} ${SERVICIO}
 RUN mvn -q -B clean package -pl common-seguridad,${SERVICIO} -am -DskipTests \
  && cp ${SERVICIO}/target/*.jar /build/app.jar

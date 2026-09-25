@@ -13,6 +13,7 @@
 #   ./infra/aws.sh iniciar     Levanta la tarea, espera el health y muestra las URLs.
 #   ./infra/aws.sh apagar      Baja la tarea a cero. IMPORTANTE: correrlo al terminar de trabajar.
 #   ./infra/aws.sh urls        Muestra las URLs del ALB y del API Gateway.
+#   ./infra/aws.sh mensajeria  Crea lo que falte del tópico SNS, las colas SQS y sus DLQ (EP2). Idempotente.
 #
 # Las credenciales del lab van en ~/.aws/credentials (panel "AWS Details"), nunca en el repo:
 # rotan en cada sesión.
@@ -24,7 +25,11 @@ PROYECTO="duocconecta"
 CLUSTER="$PROYECTO"
 SERVICIO_ECS="$PROYECTO"
 FAMILIA="$PROYECTO"
-SERVICIOS=(ms-usuarios bff-web ms-proyectos ms-contacto)
+SERVICIOS=(ms-usuarios bff-web ms-proyectos ms-contacto ms-notificaciones ms-mensajeria)
+
+# Etiqueta de imagen de la v2. No es "latest" a propósito: así las imágenes de la EP1 siguen en
+# ECR sin pisarse, y su task definition anterior sirve para volver atrás.
+TAG="${TAG:-ep2}"
 
 # Los nombres se declaran acá y no se repiten sueltos por el script. Están pensados para que
 # quien mire la consola de AWS entienda de una qué papel cumple cada recurso: la evaluación
@@ -41,6 +46,8 @@ puerto_de() {
     ms-usuarios)  echo 8081 ;;
     ms-proyectos) echo 8082 ;;
     ms-contacto)  echo 8083 ;;
+    ms-notificaciones) echo 8084 ;;
+    ms-mensajeria)     echo 8085 ;;
   esac
 }
 
@@ -51,6 +58,8 @@ ruta_de() {
     ms-usuarios)  echo "/api/v1/usuarios*" ;;
     ms-proyectos) echo "/api/v1/proyectos*" ;;
     ms-contacto)  echo "/api/v1/colaboraciones*" ;;
+    ms-notificaciones) echo "/api/v1/notificaciones*" ;;
+    ms-mensajeria)     echo "/api/v1/mensajeria*" ;;
   esac
 }
 
@@ -91,6 +100,8 @@ cmd_verificar() {
   probar "Secrets Manager" aws secretsmanager list-secrets --max-results 1
   probar "API Gateway"     aws apigatewayv2 get-apis --max-results 1
   probar "CloudWatch Logs" aws logs describe-log-groups --limit 1
+  probar "SNS (EP2)"       aws sns list-topics
+  probar "SQS (EP2)"       aws sqs list-queues --max-results 1
 
   azul "\nRecordatorio de costo"
   aviso "ALB y RDS no se apagan solos: 'aws.sh apagar' baja las tareas, pero el ALB sigue cobrando."
@@ -200,7 +211,10 @@ cmd_crear() {
     listener_arn=$(aws elbv2 create-listener --load-balancer-arn "$alb_arn" --protocol HTTP --port 80 \
       --default-actions "Type=forward,TargetGroupArn=$tg_bff" --query 'Listeners[0].ListenerArn' --output text)
   fi
-  for s in ms-usuarios ms-proyectos ms-contacto; do
+  # La lista sale de SERVICIOS y no se escribe a mano: con una lista fija, un servicio nuevo
+  # quedaba sin regla y el único síntoma era un health check en Target.Timeout.
+  for s in "${SERVICIOS[@]}"; do
+    [[ "$s" == "bff-web" ]] && continue
     local tg; tg=$(aws elbv2 describe-target-groups --names "$PROYECTO-$s" --query 'TargetGroups[0].TargetGroupArn' --output text)
     aws elbv2 create-rule --listener-arn "$listener_arn" --priority "$prioridad" \
       --conditions "Field=path-pattern,Values=$(ruta_de "$s")" \
@@ -236,7 +250,7 @@ EOV
 # build — compila la imagen de un servicio y la sube a ECR.
 # ---------------------------------------------------------------------------
 cmd_build() {
-  local s="${1:?Uso: aws.sh build <ms-usuarios|bff-web|ms-proyectos|ms-contacto>}"
+  local s="${1:?Uso: aws.sh build <ms-usuarios|bff-web|ms-proyectos|ms-contacto|ms-notificaciones|ms-mensajeria>}"
   [[ -d "$RAIZ/$s" ]] || { falla "El módulo $s todavía no existe en el repo"; exit 1; }
   local reg; reg=$(registro)
 
@@ -246,8 +260,8 @@ cmd_build() {
   # buildx construye y sube en un solo paso.
   docker buildx build --platform linux/amd64 --push \
     -f "$RAIZ/docker/Dockerfile" --build-arg "SERVICIO=$s" \
-    -t "$reg/$PROYECTO/$s:latest" "$RAIZ"
-  ok "$s publicado en ECR"
+    -t "$reg/$PROYECTO/$s:$TAG" "$RAIZ"
+  ok "$s publicado en ECR ($TAG)"
 }
 
 # ---------------------------------------------------------------------------
@@ -280,8 +294,20 @@ cmd_desplegar() {
     origenes="$origenes,https://$API_ID.execute-api.$REGION.amazonaws.com"
   fi
 
+  # El ARN del tópico lo guarda 'aws.sh mensajeria' en .recursos. Si falta (por ejemplo, porque
+  # 'crear' reescribió el archivo), se busca en SNS. Sin él, los eventos solo se registran.
+  local topico_arn="${TOPICO_EVENTOS_ARN:-}"
+  if [[ -z "$topico_arn" ]]; then
+    topico_arn=$(aws sns list-topics --query "Topics[?ends_with(TopicArn, ':$PROYECTO-eventos')].TopicArn" \
+      --output text 2>/dev/null || true)
+  fi
+  [[ -z "$topico_arn" || "$topico_arn" == "None" ]] && {
+    aviso "No existe el tópico $PROYECTO-eventos: corre 'aws.sh mensajeria'. Los eventos solo se registrarán."
+    topico_arn=""
+  }
+
   tmp=$(mktemp)  # archivo temporal: la task definition renderizada lleva ARNs y no va al repo
-  sed -e "s|__ACCOUNT_ID__|$acc|g" -e "s|__REGISTRO__|$reg|g" -e "s|__TAG__|latest|g" \
+  sed -e "s|__ACCOUNT_ID__|$acc|g" -e "s|__REGISTRO__|$reg|g" -e "s|__TAG__|$TAG|g" \
       -e "s|__REGION__|$REGION|g" -e "s|__RDS_ENDPOINT__|$endpoint|g" \
       -e "s|__SECRETO_DB_ARN__|$secreto|g" \
       -e "s|__AZURE_TENANT_ID__|${AZURE_TENANT_ID:-}|g" \
@@ -289,6 +315,8 @@ cmd_desplegar() {
       -e "s|__CORS_ORIGENES__|$origenes|g" \
       -e "s|__LOG_NIVEL__|${LOG_NIVEL:-INFO}|g" \
       -e "s|__BUCKET_ADJUNTOS__|${BUCKET_ADJUNTOS:-}|g" \
+      -e "s|__TOPICO_EVENTOS_ARN__|$topico_arn|g" \
+      -e "s|__ADMINISTRADORES__|${ADMINISTRADORES:-}|g" \
       "$RAIZ/infra/task-definition.json" > "$tmp"
 
   # Se quita el bloque de comentarios (ECS rechaza campos que no conoce) y, si la imagen de
@@ -296,7 +324,7 @@ cmd_desplegar() {
   # el contenedor es essential, así que sin imagen la tarea entera no arrancaría.
   local filtro='del(._comentario)'
   for s in "${SERVICIOS[@]}"; do
-    if ! aws ecr describe-images --repository-name "$PROYECTO/$s" --image-ids imageTag=latest >/dev/null 2>&1; then
+    if ! aws ecr describe-images --repository-name "$PROYECTO/$s" --image-ids "imageTag=$TAG" >/dev/null 2>&1; then
       aviso "$s aún no está en ECR: se despliega sin ese contenedor"
       filtro="$filtro | .containerDefinitions |= map(select(.name != \"$s\"))"
     fi
@@ -318,22 +346,22 @@ cmd_desplegar() {
   done
 
   # Sin período de gracia, ECS mata la tarea por "unhealthy" antes de que Spring Boot levante.
-  # Son 7 minutos y no 4 porque ECS mata la tarea entera si CUALQUIERA de los cuatro target
-  # groups la ve enferma al vencer: la última en arrancar se llevaba puestas a las otras tres.
+  # Son 10 minutos: ECS mata la tarea entera si CUALQUIERA de los target groups la ve enferma al
+  # vencer, y con seis JVM y cuatro Flyway en 2 vCPU los 7 minutos de la EP1 quedan justos.
   if aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICIO_ECS" \
        --query 'services[0].status' --output text 2>/dev/null | grep -q ACTIVE; then
     # Los balanceadores se redeclaran en cada actualización: al sumar un microservicio, su
     # target group existe pero el servicio seguía registrando solo los viejos.
     aws ecs update-service --cluster "$CLUSTER" --service "$SERVICIO_ECS" \
       --task-definition "$rev" --desired-count 1 --force-new-deployment \
-      --health-check-grace-period-seconds 420 \
+      --health-check-grace-period-seconds 600 \
       --load-balancers "${lb_args[@]}" >/dev/null
     ok "servicio actualizado (${#lb_args[@]} servicios tras el balanceador)"
   else
     aws ecs create-service --cluster "$CLUSTER" --service-name "$SERVICIO_ECS" \
       --task-definition "$rev" --desired-count 1 --launch-type FARGATE \
       --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG_TAREAS],assignPublicIp=ENABLED}" \
-      --health-check-grace-period-seconds 420 \
+      --health-check-grace-period-seconds 600 \
       --load-balancers "${lb_args[@]}" >/dev/null
     ok "servicio creado"
   fi
@@ -582,7 +610,8 @@ cmd_apigw() {
   # con las nuevas y además volverían a capturar el preflight de CORS.
   local borradas=0 rid
   for clave in 'ANY /api/{proxy+}' 'ANY /api/v1/bff/{proxy+}' 'ANY /api/v1/usuarios/{proxy+}' \
-               'ANY /api/v1/proyectos/{proxy+}' 'ANY /api/v1/colaboraciones/{proxy+}'; do
+               'ANY /api/v1/proyectos/{proxy+}' 'ANY /api/v1/colaboraciones/{proxy+}' \
+               'ANY /api/v1/notificaciones/{proxy+}' 'ANY /api/v1/mensajeria/{proxy+}'; do
     rid=$(id_ruta "$clave")
     [[ -n "$rid" ]] && aws apigatewayv2 delete-route --api-id "$API_ID" --route-id "$rid" \
       && borradas=$((borradas + 1))
@@ -596,6 +625,8 @@ cmd_apigw() {
     "usuarios|ms-usuarios - perfiles, roles y visibilidad"
     "proyectos|ms-proyectos - vitrina de proyectos"
     "colaboraciones|ms-contacto - solicitudes de colaboracion con consentimiento"
+    "notificaciones|ms-notificaciones - avisos generados por los eventos"
+    "mensajeria|ms-mensajeria - administracion de colas, topicos y suscripciones"
   )
   local integ integ_raiz
   for entrada in "${servicios_api[@]}"; do
@@ -720,6 +751,87 @@ cmd_urls() {
   echo "  Health:          http://$ALB_DNS/actuator/health"
 }
 
+# ---------------------------------------------------------------------------
+# mensajeria — tópico SNS, colas SQS y DLQ de la EP2. Idempotente y nunca borra.
+#
+# Es la misma topología que declara ms-notificaciones al arrancar; tenerla aquí permite crearla
+# antes del primer despliegue y rehacerla en otra cuenta. Correrla sobre lo que ya existe no
+# cambia nada: create-queue y create-topic devuelven el recurso existente.
+# ---------------------------------------------------------------------------
+cmd_mensajeria() {
+  command -v jq >/dev/null || { falla "Falta jq (brew install jq)"; exit 1; }
+  local topico
+  topico=$(aws sns create-topic --name "$PROYECTO-eventos" --query TopicArn --output text)
+  ok "tópico $PROYECTO-eventos"
+
+  url() { aws sqs get-queue-url --queue-name "$1" --query QueueUrl --output text; }
+  arn() { aws sqs get-queue-attributes --queue-url "$(url "$1")" --attribute-names QueueArn --query Attributes.QueueArn --output text; }
+
+  # Deja que SOLO este tópico escriba en la cola $1. Sin esto SNS descarta en silencio.
+  permiso() {
+    local politica
+    politica=$(jq -nc --arg cola "$(arn "$1")" --arg topico "$topico" '{Version:"2012-10-17",
+      Statement:[{Effect:"Allow", Principal:{Service:"sns.amazonaws.com"}, Action:"sqs:SendMessage",
+                  Resource:$cola, Condition:{ArnEquals:{"aws:SourceArn":$topico}}}]}')
+    aws sqs set-queue-attributes --queue-url "$(url "$1")" \
+      --attributes "$(jq -nc --arg p "$politica" '{Policy:$p}')"
+  }
+
+  # Si la cola ya tiene el permiso (por ejemplo, porque se suscribió desde la consola), no se
+  # reescribe su política: set-queue-attributes la reemplaza entera.
+  permiso_si_falta() {
+    local actual
+    actual=$(aws sqs get-queue-attributes --queue-url "$(url "$1")" --attribute-names Policy \
+      --query Attributes.Policy --output text 2>/dev/null || true)
+    [[ "$actual" == *"$topico"* ]] && return 0
+    permiso "$1"
+  }
+
+  # create-queue falla si la cola existe con atributos que difieren aunque sea en forma (por
+  # ejemplo, colas creadas desde la consola): por eso primero se pregunta si existe.
+  crear_cola() {
+    if aws sqs get-queue-url --queue-name "$1" >/dev/null 2>&1; then
+      echo "    · $1 ya existe: no se modifica"
+    else
+      aws sqs create-queue --queue-name "$1" --attributes "$2" >/dev/null
+    fi
+  }
+  local descarte='{"MessageRetentionPeriod":"1209600","SqsManagedSseEnabled":"true"}'
+
+  crear_cola "$PROYECTO-eventos-no-entregados" "$descarte"
+  permiso_si_falta "$PROYECTO-eventos-no-entregados"
+  ok "DLQ de la suscripción: $PROYECTO-eventos-no-entregados"
+
+  local cola sub filtro
+  for cola in "$PROYECTO-notificaciones-proyectos" "$PROYECTO-notificaciones-colaboraciones" "$PROYECTO-auditoria-eventos"; do
+    crear_cola "$cola-descartes" "$descarte"
+    crear_cola "$cola" "$(jq -nc --arg dlq "$(arn "$cola-descartes")" \
+      '{VisibilityTimeout:"30", ReceiveMessageWaitTimeSeconds:"20", SqsManagedSseEnabled:"true",
+        RedrivePolicy:({deadLetterTargetArn:$dlq, maxReceiveCount:"3"}|tojson)}')"
+    permiso_si_falta "$cola"
+
+    sub=$(aws sns subscribe --topic-arn "$topico" --protocol sqs --notification-endpoint "$(arn "$cola")" \
+      --attributes "$(jq -nc --arg dlq "$(arn "$PROYECTO-eventos-no-entregados")" \
+        '{RawMessageDelivery:"true", RedrivePolicy:({deadLetterTargetArn:$dlq}|tojson)}')" \
+      --return-subscription-arn --query SubscriptionArn --output text 2>/dev/null \
+      || aws sns list-subscriptions-by-topic --topic-arn "$topico" \
+           --query "Subscriptions[?Endpoint=='$(arn "$cola")'].SubscriptionArn | [0]" --output text)
+
+    case "$cola" in
+      *proyectos)      filtro='{"tipo":[{"prefix":"proyecto."}]}' ;;
+      *colaboraciones) filtro='{"tipo":[{"prefix":"colaboracion."}]}' ;;
+      *)               filtro='' ;;   # auditoría: sin filtro, recibe todo
+    esac
+    [[ -n "$filtro" ]] && aws sns set-subscription-attributes --subscription-arn "$sub" \
+      --attribute-name FilterPolicy --attribute-value "$filtro"
+    ok "$cola → $cola-descartes · filtro ${filtro:-(ninguno, recibe todo)}"
+  done
+
+  grep -q '^TOPICO_EVENTOS_ARN=' "$RAIZ/infra/.recursos" 2>/dev/null \
+    || echo "TOPICO_EVENTOS_ARN=$topico" >> "$RAIZ/infra/.recursos"
+  azul "\nMensajería lista. El ARN del tópico quedó en infra/.recursos (ignorado por git)."
+}
+
 case "${1:-}" in
   verificar) cmd_verificar ;;
   crear)     cmd_crear ;;
@@ -731,5 +843,6 @@ case "${1:-}" in
   iniciar)   cmd_iniciar ;;
   apagar)    cmd_apagar ;;
   urls)      cmd_urls ;;
+  mensajeria) cmd_mensajeria ;;
   *) sed -n '2,25p' "$0"; exit 1 ;;
 esac

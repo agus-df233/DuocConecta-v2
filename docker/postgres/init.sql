@@ -10,3 +10,6 @@ CREATE SCHEMA IF NOT EXISTS proyectos;
 
 -- Schema de ms-contacto: solicitudes de colaboración y consentimiento.
 CREATE SCHEMA IF NOT EXISTS contacto;
+
+-- Schema de ms-notificaciones (EP2): avisos, auditoría de eventos y eventos procesados.
+CREATE SCHEMA IF NOT EXISTS notificaciones;
