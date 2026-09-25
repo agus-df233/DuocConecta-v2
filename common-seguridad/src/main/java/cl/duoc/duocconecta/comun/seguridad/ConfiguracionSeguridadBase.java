@@ -49,10 +49,11 @@ public class ConfiguracionSeguridadBase {
         return new ClaimsDelToken(propiedades);
     }
 
-    /** Convierte el token en una autenticación con el rol como authority. */
+    /** Convierte el token en una autenticación con los roles como authorities. */
     @Bean
-    public ConversorRolesJwt conversorRolesJwt(ClaimsDelToken claimsDelToken, ResolvedorRol resolvedorRol) {
-        return new ConversorRolesJwt(claimsDelToken, resolvedorRol);
+    public ConversorRolesJwt conversorRolesJwt(ClaimsDelToken claimsDelToken, ResolvedorRol resolvedorRol,
+                                               PropiedadesSeguridad propiedades) {
+        return new ConversorRolesJwt(claimsDelToken, resolvedorRol, propiedades);
     }
 
     /** Componente reutilizable para obtener el usuario autenticado desde cualquier capa. */

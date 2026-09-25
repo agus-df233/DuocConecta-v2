@@ -72,8 +72,12 @@ duocconecta:
       - given_name
       - preferred_username
 
-    # Claim con los App Roles de Azure AD. Si viene vacío, el rol se deriva del dominio.
+    # Claim con los App Roles de Azure AD. Se suman al rol del dominio, nunca lo reemplazan.
     claim-roles: roles
+
+    # Vía B para el rol ADMINISTRADOR, si el tenant no permite App Roles: correos separados por
+    # coma. Vacía por defecto; el valor real va en .env o en la task definition, nunca aquí.
+    administradores: ${ADMINISTRADORES:}
 
     # Mapa de dominio de correo a rol. Sumar un dominio nuevo es agregar una línea aquí:
     # no hace falta tocar el código.

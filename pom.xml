@@ -30,6 +30,7 @@
     -->
     <modules>
         <module>common-seguridad</module>
+        <module>common-eventos</module>
         <module>ms-usuarios</module>
         <module>ms-proyectos</module>
         <module>ms-contacto</module>
@@ -44,6 +45,8 @@
 
         <aws.sdk.version>2.35.9</aws.sdk.version>
         <springdoc.version>3.1.0</springdoc.version>
+        <!-- La rama 4.x es la de Boot 4. Verificado con Boot 4.1.1 en el spike de la Fase 0. -->
+        <spring-cloud-aws.version>4.1.1</spring-cloud-aws.version>
     </properties>
 
     <dependencyManagement>
@@ -55,13 +58,29 @@
                 <version>${springdoc.version}</version>
             </dependency>
 
-            <!-- SDK de AWS. Solo ms-proyectos lo usa, para firmar la subida de adjuntos a S3. -->
+            <!-- SDK de AWS: S3 para los adjuntos, SNS y SQS para la mensajería. -->
             <dependency>
                 <groupId>software.amazon.awssdk</groupId>
                 <artifactId>bom</artifactId>
                 <version>${aws.sdk.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+
+            <!-- Spring Cloud AWS: @SqsListener para los consumidores de ms-notificaciones. -->
+            <dependency>
+                <groupId>io.awspring.cloud</groupId>
+                <artifactId>spring-cloud-aws-dependencies</artifactId>
+                <version>${spring-cloud-aws.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Contrato de eventos, publicación en SNS y topología, compartidos por los servicios. -->
+            <dependency>
+                <groupId>cl.duoc.duocconecta</groupId>
+                <artifactId>common-eventos</artifactId>
+                <version>${project.version}</version>
             </dependency>
 
             <!-- Módulo propio con la validación de JWT compartida por todos los servicios. -->

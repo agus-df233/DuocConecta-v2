@@ -1,5 +1,6 @@
 package cl.duoc.duocconecta.comun.seguridad;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +38,12 @@ public class PropiedadesSeguridad {
      * lo que hace más legible el log de arranque.</p>
      */
     private Map<String, Rol> dominios = new LinkedHashMap<>();
+
+    /**
+     * Correos con rol de administrador, por si el tenant no permite App Roles. Vacía por defecto:
+     * el valor real llega por variable de entorno y nunca se escribe en el repositorio.
+     */
+    private List<String> administradores = new ArrayList<>();
 
     public String getAudiencia() {
         return audiencia;
@@ -76,5 +83,13 @@ public class PropiedadesSeguridad {
 
     public void setDominios(Map<String, Rol> dominios) {
         this.dominios = dominios;
+    }
+
+    public List<String> getAdministradores() {
+        return administradores;
+    }
+
+    public void setAdministradores(List<String> administradores) {
+        this.administradores = administradores;
     }
 }

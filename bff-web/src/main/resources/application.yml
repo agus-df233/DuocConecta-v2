@@ -32,6 +32,10 @@ duocconecta:
       - given_name
       - preferred_username
     claim-roles: roles
+
+    # Vía B para el rol ADMINISTRADOR, si el tenant no permite App Roles: correos separados por
+    # coma. Vacía por defecto; el valor real va en .env o en la task definition, nunca aquí.
+    administradores: ${ADMINISTRADORES:}
     dominios:
       duocuc.cl: ESTUDIANTE
       profesor.duoc.cl: PROFESOR
