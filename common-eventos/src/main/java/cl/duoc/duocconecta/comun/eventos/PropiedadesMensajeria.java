@@ -32,6 +32,12 @@ public class PropiedadesMensajeria {
     /** DLQ de cada cola de trabajo, con la misma clave lógica. */
     private Map<String, String> descartes = new LinkedHashMap<>();
 
+    /**
+     * Prefijo de {@code tipo} que recibe cada cola: el binding. Una cola sin entrada aquí recibe
+     * todo, como el {@code #} de RabbitMQ.
+     */
+    private Map<String, String> filtros = new LinkedHashMap<>();
+
     /** DLQ de la suscripción SNS: lo que SNS no logró entregar a ninguna cola. */
     private String noEntregados;
 
@@ -193,6 +199,20 @@ public class PropiedadesMensajeria {
 
     public void setDescartes(Map<String, String> descartes) {
         this.descartes = descartes;
+    }
+
+    /** El prefijo que filtra una cola, o nulo si recibe todo. */
+    public String filtro(String clave) {
+        String prefijo = filtros.get(clave);
+        return prefijo == null || prefijo.isBlank() ? null : prefijo;
+    }
+
+    public Map<String, String> getFiltros() {
+        return filtros;
+    }
+
+    public void setFiltros(Map<String, String> filtros) {
+        this.filtros = filtros;
     }
 
     public String getNoEntregados() {

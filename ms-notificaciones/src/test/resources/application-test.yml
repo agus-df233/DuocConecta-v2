@@ -1,0 +1,49 @@
+# Configuración exclusiva de los tests de ms-notificaciones: sin Docker, sin internet y sin AWS.
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:notificaciones_test;INIT=CREATE SCHEMA IF NOT EXISTS notificaciones;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ''
+
+  jpa:
+    hibernate:
+      # Las migraciones están escritas para PostgreSQL.
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        default_schema: notificaciones
+
+  flyway:
+    enabled: false
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # issuer-uri haría descubrimiento OIDC contra la red al arrancar.
+          issuer-uri: ""
+          jwk-set-uri: http://localhost:0/.well-known/jwks.json
+
+  cloud:
+    aws:
+      credentials:
+        # Credenciales falsas: ningún test llama a AWS de verdad.
+        access-key: test
+        secret-key: test
+      sqs:
+        listener:
+          auto-startup: false
+
+duocconecta:
+  mensajeria:
+    habilitada: false
+    declarar-topologia: false
+    vigilar-descartes: false
+  seguridad:
+    audiencia: audiencia-de-prueba
+    dominios:
+      duocuc.cl: ESTUDIANTE
+      profesor.duoc.cl: PROFESOR
+      duoc.cl: ACADEMICO

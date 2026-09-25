@@ -1,0 +1,136 @@
+# Configuración de ms-notificaciones (EP2).
+# Ningún valor sensible está escrito aquí: todo viene por variable de entorno.
+
+server:
+  port: 8084
+
+spring:
+  application:
+    name: ms-notificaciones
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/duocconecta}
+    username: ${DB_USER:duocconecta}
+    password: ${DB_PASSWORD:duocconecta}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: notificaciones
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    schemas: notificaciones
+    default-schema: notificaciones
+    # En RDS no se ejecuta init.sql: sin esto, validate falla al arrancar en la nube.
+    create-schemas: true
+    locations: classpath:db/migration
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://login.microsoftonline.com/${AZURE_TENANT_ID}/v2.0
+
+  cloud:
+    aws:
+      region:
+        static: ${AWS_REGION:us-east-1}
+      sqs:
+        # Si una cola no existe, fallar: la estrategia por defecto la crearía sin DLQ ni redrive.
+        queue-not-found-strategy: fail
+        listener:
+          # En falso los listeners no arrancan (tests, o trabajar sin AWS).
+          auto-startup: ${CONSUMIDORES_ACTIVOS:true}
+          # La tarea comparte 2 vCPU con otras cinco JVM: pocos mensajes en paralelo.
+          max-concurrent-messages: 5
+          max-messages-per-poll: 5
+
+duocconecta:
+  # Mensajería. Es el ÚNICO lugar donde viven los nombres de tópico, colas, DLQ y filtros.
+  mensajeria:
+    habilitada: ${MENSAJERIA_HABILITADA:true}
+    region: ${AWS_REGION:us-east-1}
+    origen: ${spring.application.name}
+    # Crea al arrancar lo que falte de la topología (nunca borra ni pisa lo que existe).
+    declarar-topologia: ${DECLARAR_TOPOLOGIA:true}
+    # Deja en el log cuándo llega algo a una DLQ.
+    vigilar-descartes: ${VIGILAR_DESCARTES:true}
+    # Solo para la demo: un evento con detalle "simular-fallo-recuperable" falla a propósito.
+    permitir-fallos-simulados: ${PERMITIR_FALLOS_SIMULADOS:false}
+    topico:
+      nombre: ${SNS_TOPICO_EVENTOS:duocconecta-eventos}
+      arn: ${SNS_TOPICO_EVENTOS_ARN:}
+    colas:
+      proyectos: ${SQS_COLA_PROYECTOS:duocconecta-notificaciones-proyectos}
+      colaboraciones: ${SQS_COLA_COLABORACIONES:duocconecta-notificaciones-colaboraciones}
+      auditoria: ${SQS_COLA_AUDITORIA:duocconecta-auditoria-eventos}
+    descartes:
+      proyectos: ${SQS_COLA_PROYECTOS:duocconecta-notificaciones-proyectos}-descartes
+      colaboraciones: ${SQS_COLA_COLABORACIONES:duocconecta-notificaciones-colaboraciones}-descartes
+      auditoria: ${SQS_COLA_AUDITORIA:duocconecta-auditoria-eventos}-descartes
+    no-entregados: ${SQS_COLA_NO_ENTREGADOS:duocconecta-eventos-no-entregados}
+    # Los bindings: qué prefijo de "tipo" recibe cada cola. Auditoría no tiene: recibe todo.
+    filtros:
+      proyectos: "proyecto."
+      colaboraciones: "colaboracion."
+    parametros:
+      retencion-trabajo-segundos: 345600     # 4 días
+      retencion-descartes-segundos: 1209600  # 14 días: en SQS lo vencido se borra
+      visibilidad-segundos: 30
+      espera-segundos: 20                    # long polling
+      max-recepciones: 3                     # a la tercera, SQS lo mueve a la DLQ
+
+  seguridad:
+    audiencia: ${AZURE_CLIENT_ID}
+    claims-correo:
+      - email
+      - preferred_username
+      - upn
+      - unique_name
+    claims-nombre:
+      - name
+      - given_name
+      - preferred_username
+    # App Roles de Azure AD. Se suman al rol del dominio, nunca lo reemplazan.
+    claim-roles: roles
+    # Vía B para el rol ADMINISTRADOR. El valor real va en .env o en la task definition.
+    administradores: ${ADMINISTRADORES:}
+    dominios:
+      duocuc.cl: ESTUDIANTE
+      profesor.duoc.cl: PROFESOR
+      duoc.cl: ACADEMICO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+
+logging:
+  level:
+    cl.duoc.duocconecta: ${LOG_NIVEL:INFO}
+  pattern:
+    # El X-Request-Id que viajó con el mensaje se repone en el MDC: publicador y consumidor se cruzan.
+    level: "%5p [%X{idPeticion:-sin-id}]"
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+logging:
+  level:
+    cl.duoc.duocconecta: DEBUG

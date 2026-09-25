@@ -34,6 +34,7 @@
         <module>ms-usuarios</module>
         <module>ms-proyectos</module>
         <module>ms-contacto</module>
+        <module>ms-notificaciones</module>
         <module>bff-web</module>
     </modules>
 
