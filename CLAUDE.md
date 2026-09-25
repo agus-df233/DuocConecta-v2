@@ -19,8 +19,17 @@ nadie ve los datos de contacto de otro hasta que ambos aceptan colaborar.
 ### Objetivo de la EP1
 
 La EP1 evalúa tres cosas: **autenticación**, **validación de JWT** y **despliegue en la nube**.
-No evalúa la funcionalidad completa de la plataforma. Todo lo que se construya debe servir a esos
-tres puntos.
+Todo eso sigue vigente en la v2 y **no se toca**: la mensajería se suma encima.
+
+### Objetivo de la EP2 (este repositorio, v2)
+
+**Mensajería asíncrona** sin afectar la lógica existente: colas con DLQ, productores y
+consumidores con confirmación explícita, y un **microservicio administrador** con API REST. El
+broker es **Amazon SQS**, con **SNS** como exchange topic (ver §12). La pauta está escrita para
+RabbitMQ; la traducción indicador por indicador está en §12.
+
+Este repositorio nació como **copia del código de la EP1** (rama `developer`, `1b205d2`), sin su
+historial ni sus remotes. El repositorio de la EP1 no se modifica.
 
 ---
 
@@ -122,6 +131,18 @@ El rol se determina por el **dominio del correo institucional** que viene en el 
 | `@duoc.cl` | `ACADEMICO` |
 | cualquier otro | **rechazar** → 403, no se auto-provisiona el perfil |
 
+**Rol `ADMINISTRADOR` (EP2).** No sale de un dominio: **se suma** al rol del dominio, nunca lo
+reemplaza (si lo reemplazara, el administrador recibiría 403 en toda la plataforma). Llega por
+dos vías, y la elección se hace al configurar el tenant:
+
+- **App Role** `ADMINISTRADOR` en Entra ID, en el claim `roles` (vía preferida).
+- **Lista** `duocconecta.seguridad.administradores: ${ADMINISTRADORES:}`: correos separados por
+  coma. El valor real va en `.env` o en la task definition, **nunca en el repositorio** (es público).
+
+Un dominio no autorizado queda sin permisos aunque traiga el App Role o esté en la lista. La regla
+vive en `ConversorRolesJwt`; las expresiones `@PreAuthorize` compartidas, en `ReglasDeAcceso`
+(`ROLES_DE_LA_PLATAFORMA`, `SOLO_ADMINISTRADOR`).
+
 La lógica vive **centralizada y configurable** en `ResolvedorRol` + `PropiedadesSeguridad`
 (`duocconecta.seguridad.dominios` en `application.yml`), porque pueden sumarse dominios.
 
@@ -129,10 +150,13 @@ La lógica vive **centralizada y configurable** en `ResolvedorRol` + `Propiedade
 `endsWith`. Con `endsWith`, `alguien@profesor.duoc.cl` haría match también con `duoc.cl` y quedaría
 clasificado mal según el orden de iteración del mapa.
 
-### Fuera de alcance de la EP1
+### Fuera de alcance
 
-**No generar**: `ms-prompts`, RabbitMQ, Kafka, moderación, notificaciones.
-Se difieren a EP2/EP3.
+- **Construido en la EP2:** notificaciones (SQS/SNS), moderación de la vitrina, rol `ADMINISTRADOR`.
+- **No generar todavía (EP3 o v3):** `ms-prompts`, `ms-publicaciones`, Kafka, correo real con SES,
+  patrón outbox, panel de administración en el frontend, moderación de colaboraciones.
+- **RabbitMQ:** solo si se confirma que la EP2 pide dos brokers. Iría detrás de la misma interfaz
+  `PublicadorEventos`, sin tocar el negocio.
 
 ---
 
@@ -144,6 +168,8 @@ Se difieren a EP2/EP3.
 | **2** | `frontend-web` React + Vite con MSAL (Authorization Code + PKCE) | Construida |
 | **3** | `ms-proyectos` (CRUD) + agregación en el BFF → llena la vitrina | Construida |
 | **4** | `ms-contacto` (solicitudes de colaboración, HU-17 a HU-20) + agregación en el BFF | Construida |
+| **5 · EP2** | `common-eventos`, productores en ms-proyectos y ms-contacto, `ms-notificaciones` (consumidores SQS) | Construida |
+| **6 · EP2** | `ms-mensajeria` (administrador), rol `ADMINISTRADOR` y moderación de la vitrina | Construida |
 
 El objetivo de la demo es: **login institucional → IDaaS → vitrina de proyectos, con el perfil del
 usuario relleno y las solicitudes de contacto funcionando de punta a punta.**
@@ -238,7 +264,8 @@ Cada microservicio organiza su paquete en estas 6 capas, **en este orden**:
 - **Nunca subir secretos.** `issuer-uri`, `client-id`, `tenant-id`, credenciales de base de datos:
   todo por variable de entorno / `application.yml` con `${VAR:default-dev}`. Nunca hardcodear.
   `.env` está en `.gitignore`; usa `.env.example` como plantilla.
-- No generar `ms-prompts`, RabbitMQ, Kafka, moderación ni notificaciones en EP1.
+- Los eventos **nunca** llevan correo, teléfono ni redes: solo identificadores (§12).
+- Ningún correo de administrador, ARN ni número de cuenta en el repositorio: es público.
 - No exponer entidades JPA directamente.
 - `telefono` / `redes` nunca en respuestas públicas.
 
@@ -260,7 +287,10 @@ DuocConecta/
 ├── ms-usuarios/            # puerto 8081, schema `usuarios`
 ├── ms-proyectos/           # puerto 8082, schema `proyectos`  — vitrina de proyectos
 ├── ms-contacto/            # puerto 8083, schema `contacto`   — solicitudes de colaboración
+├── ms-notificaciones/      # puerto 8084, schema `notificaciones` — consumidores SQS y avisos (EP2)
+├── ms-mensajeria/          # puerto 8085, sin base — administrador de colas, tópicos y suscripciones (EP2)
 ├── common-seguridad/       # validación de JWT, manejo de errores y registro, compartidos
+├── common-eventos/         # contrato de eventos, publicación en SNS y topología (EP2)
 ├── docker/                 # Dockerfile de los servicios e init.sql de PostgreSQL
 └── infra/                  # aws.sh y la definición de la tarea de ECS
 ```
@@ -368,7 +398,7 @@ Receta para que un módulo nuevo encaje sin retrabajo. `ms-proyectos` es el prim
 
 | Qué | Valor |
 |---|---|
-| Puerto | `ms-usuarios` 8081 · `ms-proyectos` 8082 · `ms-contacto` 8083; el siguiente, 8084 |
+| Puerto | `ms-usuarios` 8081 · `ms-proyectos` 8082 · `ms-contacto` 8083 · `ms-notificaciones` 8084 · `ms-mensajeria` 8085; el siguiente, 8086 |
 | Migraciones | `V1..V899` son cambios de esquema; **`V900+` son datos de ejemplo** y solo se cargan con el perfil `dev`. Por eso `ms-proyectos` lleva `out-of-order: true` en ese perfil: una migración real nueva siempre queda "atrasada" respecto de los datos de ejemplo ya aplicados. En la nube el perfil `dev` no se activa nunca |
 | Schema propio | **`proyectos`** (ya creado en `docker/postgres/init.sql`) |
 | Paquete raíz | `cl.duoc.duocconecta.proyectos` |
@@ -401,20 +431,22 @@ en el repo, se despliega con `make desplegar SERVICIO=ms-proyectos`.
 ## 11. Infraestructura y despliegue
 
 ```
-Navegador          API Gateway HTTP API      ALB          ECS Fargate — 1 tarea, 4 contenedores
-   (front)     →   (validación de JWT)   →  (rutas)  →    ├── bff-web      :8080
-                                                          ├── ms-usuarios  :8081  → RDS PostgreSQL
-                                                          ├── ms-proyectos :8082
-                                                          └── ms-contacto  :8083
+Navegador          API Gateway HTTP API      ALB          ECS Fargate — 1 tarea, 6 contenedores
+   (front)     →   (validación de JWT)   →  (rutas)  →    ├── bff-web           :8080
+                                                          ├── ms-usuarios       :8081  → RDS PostgreSQL
+                                                          ├── ms-proyectos      :8082  ─┐ publican en
+                                                          ├── ms-contacto       :8083  ─┘ SNS (EP2)
+                                                          ├── ms-notificaciones :8084  ← consume SQS
+                                                          └── ms-mensajeria     :8085  → administra SQS/SNS
 ```
 
-Con cuatro JVM en la misma tarea hay tres cosas que **no se ajustan solas** y que costaron un
+Con varias JVM en la misma tarea (seis desde la EP2) hay tres cosas que **no se ajustan solas** y que costaron un
 despliegue entero de depuración:
 
 | Qué | Valor | Por qué |
 |---|---|---|
-| Memoria | 2 vCPU / 4 GB de tarea, tope de 1 GB por contenedor | El heap lo acota la imagen con `MaxRAMPercentage`. Sin topes, la primera JVM en arrancar se queda con casi toda la RAM y las demás mueren |
-| Período de gracia del health check | **420 s**, no los 240 s iniciales | ECS mata la tarea entera si **cualquiera** de los cuatro target groups la ve enferma al vencer la gracia. Con tres servicios corriendo Flyway al arrancar, la última en levantar se llevaba puestas a las otras tres |
+| Memoria | 2 vCPU / **6 GB** de tarea (EP2; eran 4 GB con cuatro servicios), tope de 1 GB por contenedor y 768 MB para ms-mensajeria | El heap lo acota la imagen con `MaxRAMPercentage`. Sin topes, la primera JVM en arrancar se queda con casi toda la RAM y las demás mueren |
+| Período de gracia del health check | **600 s** (EP2; eran 420 s y antes 240 s) | ECS mata la tarea entera si **cualquiera** de los target groups la ve enferma al vencer la gracia. Con tres servicios corriendo Flyway al arrancar, la última en levantar se llevaba puestas a las otras tres |
 | Timeout del health check | **15 s**, no los 5 s por defecto | Con el recolector serie y la CPU compartida, una pausa de GC hace que `/actuator/health` tarde más de 5 s y el ALB da el destino por muerto aunque la aplicación esté viva |
 
 **La trampa más cara:** el security group de las tareas abría los puertos con una lista escrita a
@@ -435,7 +467,7 @@ token o de permisos. El síntoma que lo delata es que **los GET funcionan y solo
 
 ### Cómo se sigue una petición
 
-Los cuatro contenedores escriben al **mismo** grupo de CloudWatch (`/ecs/duocconecta`), cada uno en
+Todos los contenedores escriben al **mismo** grupo de CloudWatch (`/ecs/duocconecta`), cada uno en
 su propia corriente. Para poder distinguir qué línea del BFF corresponde a qué línea del
 microservicio, cada petición lleva un **identificador de correlación**:
 
@@ -444,7 +476,7 @@ microservicio, cada petición lleva un **identificador de correlación**:
   respuesta, así el navegador puede citarlo al reportar un problema.
 - El patrón de log lo imprime en **todas** las líneas: `INFO [a3f19c2b] ...`.
 - El BFF **reenvía la cabecera** al llamar a los microservicios, así que una misma petición del
-  navegador queda marcada igual en las cuatro corrientes. Buscar ese identificador en CloudWatch
+  navegador queda marcada igual en todas las corrientes, **y el identificador también cruza las colas** (§12). Buscar ese identificador en CloudWatch
   devuelve el recorrido completo.
 
 `RegistroDePeticiones` anota **cómo terminó cada petición**: siempre las que fallan (con usuario y
@@ -476,3 +508,75 @@ make apagar       # baja las tareas a cero — CORRER AL TERMINAR LA JORNADA
 
 El crédito del lab es de **$50 y si se agota se pierde todo el entorno**. El ALB y RDS no se apagan
 solos: `make apagar` solo baja las tareas de Fargate.
+
+---
+
+## 12. Mensajería (EP2): Amazon SNS + SQS
+
+**Por qué SNS además de SQS.** SQS no tiene exchange: una cola es un buzón punto a punto, sin
+routing keys ni comodines. El tópico SNS hace de exchange topic: recibe cada evento una vez y
+entrega una copia a cada cola suscrita, según su **filtro** sobre el atributo `tipo`.
+
+```
+ms-proyectos ─┐                             filtro (atributo "tipo")        cola SQS                                  consumidor
+              ├─► SNS duocconecta-eventos ─┬─ prefix "proyecto."     ─► duocconecta-notificaciones-proyectos      ─► ConsumidorProyectos
+ms-contacto ──┘                            ├─ prefix "colaboracion." ─► duocconecta-notificaciones-colaboraciones ─► ConsumidorColaboraciones
+                                           └─ sin filtro (el "#")    ─► duocconecta-auditoria-eventos             ─► ConsumidorAuditoria
+cada cola ─► <cola>-descartes (DLQ, tras 3 recepciones) · lo que SNS no entrega ─► duocconecta-eventos-no-entregados
+```
+
+**Catálogo** (única fuente: `TiposDeEvento`): `proyecto.publicado`, `.actualizado`, `.eliminado`,
+`.comentado`, `.colaborador_agregado`, `.ocultado`, `.restaurado`, `.comentario_eliminado`;
+`colaboracion.solicitada`, `.aceptada`, `.rechazada`. En minúsculas y **sin tildes**: el filtro
+compara texto exacto y una tilde hace que el evento no le llegue a nadie, sin error.
+
+**Reglas:**
+
+- Los servicios de negocio solo hacen `publishEvent(EventoDuocConecta.nuevo(...))`. La
+  publicación en SNS ocurre **después del commit** (`PublicacionTrasConfirmar`); si SNS falla, se
+  registra ERROR y el negocio sigue (el outbox queda para la EP3).
+- Los eventos llevan **identificadores** (`oid`, UUID), nunca correo, teléfono ni redes.
+- Los nombres de tópico, colas, DLQ y filtros viven **solo** en `duocconecta.mensajeria.*` del
+  `application.yml` (`PropiedadesMensajeria`). Ningún texto suelto en el código.
+- La topología se declara como beans en `ms-notificaciones/config/ConfiguracionTopologia` y
+  `DeclaradorTopologia` la crea si falta, sin borrar ni pisar nada. `aws.sh mensajeria` hace lo
+  mismo desde la línea de comandos.
+- El `X-Request-Id` viaja como atributo del mensaje y el consumidor lo repone en el MDC.
+
+**Confirmación (todos los consumidores en modo `MANUAL`, decisión en `ProcesadorDeMensajes`):**
+
+| Caso | Acción |
+|---|---|
+| Procesado | `acknowledge()` |
+| Duplicado (`evento_procesado`, PK `id_evento` + `consumidor`) | `acknowledge()` sin volver a actuar |
+| Tipo nuevo bien formado | `acknowledge()` sin acción: es la gracia del topic |
+| Error recuperable | Sin ack + más visibilidad por intento; la redrive lo lleva a la DLQ a la 3.ª recepción |
+| No recuperable (JSON inválido, sin `idEvento`/`tipo`, versión no soportada, colaboración sin destinatario) | Copia a su DLQ con el atributo `motivo-descarte` + `acknowledge()` |
+
+Las DLQ **no se consumen**: `MonitorDescartes` las lee sin vaciarlas y `VigilanciaDescartes`
+deja en el log cuándo llega algo. Así lo descartado se revisa y se devuelve con el redrive de
+`ms-mensajeria`.
+
+**Trampas ya pagadas:**
+
+- SNS y SQS **no aceptan puntos** en el nombre; en el valor del atributo `tipo` sí.
+- Sin la política que deja al tópico escribir en la cola, SNS descarta **sin ningún log**.
+- Sin **entrega cruda** (`RawMessageDelivery`), el cuerpo llega envuelto y los atributos no
+  llegan como atributos SQS.
+- En SQS no hay "NACK sin reencolar": lo que no tiene arreglo se copia a la DLQ a mano.
+- En SQS lo vencido **se borra**, no va a la DLQ: las DLQ retienen 14 días.
+- `spring.cloud.aws.sqs.queue-not-found-strategy: fail`: la estrategia por defecto crearía una
+  cola que falta **sin DLQ ni redrive**.
+- `create-queue` falla si la cola existe con atributos distintos aunque sea en forma: `aws.sh
+  mensajeria` pregunta primero si existe.
+- SSE con la clave de SQS (`SqsManagedSseEnabled`): con una clave KMS administrada por AWS, SNS
+  no podría escribir.
+
+**Administración (solo `ADMINISTRADOR`):** `ms-mensajeria` en `/api/v1/mensajeria/{colas,topicos,suscripciones}`
+(crear, listar, purgar, redrive, eliminar; la topología base está protegida y responde 409), y
+`ms-notificaciones` en `/api/v1/notificaciones/admin/{descartes,consumidores}` (estado de las
+DLQ, y pausa o reanudación de los consumidores para demostrar el desacoplamiento).
+
+**Moderación (solo `ADMINISTRADOR`), en `/api/v1/proyectos/admin`:** listar todo, ocultar con
+motivo, mostrar, borrar proyectos y borrar comentarios. Ocultar es una marca aparte
+(`V4__moderacion.sql`), no un cambio de visibilidad: la dueña no puede revertirla con un PUT.

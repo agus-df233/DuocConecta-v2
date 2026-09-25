@@ -67,8 +67,11 @@ En el orden en que conviene recorrerlos: del frontend hacia adentro.
 | `ms-usuarios` | 8081 | Identidad y perfil. Dueño del schema `usuarios` |
 | `ms-proyectos` | 8082 | Vitrina de proyectos y comentarios. Schema `proyectos` |
 | `ms-contacto` | 8083 | Solicitudes de colaboración. Schema `contacto` |
+| `ms-notificaciones` | 8084 | **EP2.** Consume las colas SQS y arma la bandeja de avisos. Schema `notificaciones` |
+| `ms-mensajeria` | 8085 | **EP2.** Administra colas, tópicos y suscripciones. Sin base de datos |
 | `common-seguridad` | — | Librería compartida: validación de JWT (audiencia, roles, dominios), manejo de errores y registro de peticiones |
-| `docker` | — | Dockerfile de los cuatro servicios e inicialización de PostgreSQL |
+| `common-eventos` | — | **EP2.** Contrato de los eventos, publicación en SNS y topología de colas |
+| `docker` | — | Dockerfile de los seis servicios e inicialización de PostgreSQL |
 | `infra` | — | Despliegue en AWS: `aws.sh` y la definición de la tarea de ECS |
 
 ## Arquitectura
@@ -76,6 +79,9 @@ En el orden en que conviene recorrerlos: del frontend hacia adentro.
 ```
 Navegador  →  API Gateway  →  ALB  →  BFF  →  microservicios  →  PostgreSQL
               (valida JWT)           (valida JWT)  (valida JWT)
+                                                     │  eventos (EP2)
+                                                     ▼
+                              SNS duocconecta-eventos → colas SQS → ms-notificaciones
 ```
 
 El token se valida **tres veces**: en el API Gateway, en el BFF y en el microservicio. Es defensa
@@ -128,6 +134,12 @@ sube al repositorio.**
 | `MS_USUARIOS_URL` · `MS_PROYECTOS_URL` · `MS_CONTACTO_URL` | No | Por defecto `localhost` en sus puertos |
 | `S3_BUCKET_ADJUNTOS` | No | Bucket de los archivos adjuntos. Vacío en local: sin él, firmar una subida falla en vez de escribir en un bucket equivocado |
 | `AWS_REGION` | No | Por defecto `us-east-1` |
+| `SNS_TOPICO_EVENTOS_ARN` | No | **EP2.** Tópico donde se publican los eventos. Vacío = solo se registran en el log. Se obtiene con `make mensajeria` |
+| `ADMINISTRADORES` | No | **EP2.** Correos con rol `ADMINISTRADOR`, separados por coma, si no se usa el App Role de Entra. Nunca en el repositorio |
+| `CONSUMIDORES_ACTIVOS` | No | **EP2.** En `false`, ms-notificaciones no arranca sus consumidores (sin credenciales de AWS) |
+
+Las credenciales de AWS **no** son variables: en local salen de `~/.aws/credentials` (panel
+*AWS Details* del Learner Lab) y en Fargate de `LabRole`.
 
 ## Endpoints
 
@@ -169,6 +181,51 @@ sube al repositorio.**
 | `GET`/`POST /vitrina/{id}/comentarios` | Suma el nombre de quien comentó |
 | `/colaboraciones/**` | Arma los datos de contacto desde el perfil de cada parte, resuelve **cuál de los dos lados** le toca ver a quien consulta, y suma el nombre del proyecto |
 
+### Moderación (EP2, solo `ADMINISTRADOR`) — `/api/v1/proyectos/admin`
+
+| Método y ruta | Qué hace |
+|---|---|
+| `GET /?oculto=&visibilidad=` | Todos los proyectos, incluidos privados y ocultos |
+| `PATCH /{id}/ocultar` · `PATCH /{id}/mostrar` | Saca o devuelve un proyecto de la vitrina. La dueña recibe un aviso con el motivo |
+| `DELETE /{id}` | Borra cualquier proyecto, con sus archivos |
+| `GET /comentarios?proyectoId=` · `DELETE /comentarios/{id}` | Modera comentarios |
+
+### `ms-notificaciones` (EP2) — `/api/v1/notificaciones`
+
+| Método y ruta | Qué hace |
+|---|---|
+| `GET /` · `GET /no-leidos` | Mis avisos y cuántos no he leído |
+| `PATCH /{id}/leido` | Marca un aviso propio |
+| `GET /admin/descartes` · `GET /admin/descartes/{cola}/mensajes` | Estado de las DLQ, sin vaciarlas (`ADMINISTRADOR`) |
+| `GET /admin/consumidores` · `POST /admin/consumidores/{pausa,reanudar}` | Detiene y reanuda los consumidores sin detener la tarea (`ADMINISTRADOR`) |
+
+### `ms-mensajeria` (EP2, solo `ADMINISTRADOR`) — `/api/v1/mensajeria`
+
+| Método y ruta | Qué hace |
+|---|---|
+| `GET` · `POST /colas` · `GET` · `DELETE /colas/{nombre}` | Colas SQS; por defecto se crean con su DLQ `<nombre>-descartes` |
+| `POST /colas/{nombre}/purga` · `POST /colas/{nombre}/redrive` | Vacía una cola, o devuelve a su cola lo que quedó en una DLQ |
+| `GET` · `POST /topicos` · `DELETE /topicos/{nombre}` | Tópicos SNS (los exchanges) |
+| `GET` · `POST /suscripciones` · `DELETE /suscripciones/{id}` | Suscripciones con filtro por prefijo de `tipo` (los bindings) |
+
+La topología base (el tópico `duocconecta-eventos`, sus tres colas y sus DLQ) está protegida:
+eliminarla desde la API responde 409.
+
+## Mensajería (EP2)
+
+ms-proyectos y ms-contacto publican **eventos** (`proyecto.comentado`, `colaboracion.aceptada`…)
+en un tópico **SNS**, después de guardar el cambio. SNS entrega una copia a cada cola **SQS**
+suscrita según su filtro, y ms-notificaciones las consume con **confirmación manual**: lo que
+falla se reintenta y, a la tercera, queda en su **DLQ**. Los eventos llevan identificadores, nunca
+datos de contacto, y el `X-Request-Id` viaja con cada mensaje.
+
+```bash
+make mensajeria   # crea lo que falte del tópico, las colas y sus DLQ (idempotente, nunca borra)
+```
+
+El detalle (catálogo de eventos, tabla de confirmación y trampas) está en
+[`CLAUDE.md`](CLAUDE.md) §12.
+
 ## Seguridad
 
 Todos los servicios son OAuth2 Resource Server y validan firma, vigencia, emisor y **audiencia**.
@@ -186,19 +243,24 @@ Los errores salen en **Problem Details (RFC 9457)**, con el motivo en `detail`:
 
 ### Swagger UI
 
-`http://localhost:{8080..8083}/swagger-ui.html` — botón **Authorize** y pegar el access token, sin
+`http://localhost:{8080..8085}/swagger-ui.html` — botón **Authorize** y pegar el access token, sin
 la palabra `Bearer`.
 
 ## Tests
 
 ```bash
-mvn test        # 44 pruebas
+mvn test        # 85 pruebas
 ```
 
 Cubren que el contexto levante, que una ruta protegida responda 401 sin token, que un token sin rol
 reciba 403 y no un 500, que un dominio externo reciba 403, y el recorrido completo del
 consentimiento en `ms-contacto`: pedir contacto ofreciendo el propio, aceptar, y recién entonces
 ver **las dos partes** los datos de la otra.
+
+Las de la EP2 cubren el rol `ADMINISTRADOR` aditivo (y que un dominio externo no se rescata), que
+cada acción publique su evento sin datos de contacto, la moderación de la vitrina, cada fila de
+la tabla de confirmación de los consumidores (con `Acknowledgement` simulado, sin AWS), la
+idempotencia, y la validación del administrador de colas contra un SQS falso.
 
 ## Nota sobre la versión de Spring Boot
 
