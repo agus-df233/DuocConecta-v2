@@ -1,9 +1,10 @@
-// Pantalla de perfil: datos propios, solicitudes y proyectos publicados.
+// Pantalla de perfil: datos propios, avisos, solicitudes y proyectos publicados.
 // Las solicitudes están aquí y no en una vista aparte porque son información privada.
 import { useEffect, useMemo, useState } from 'react'
 import {
   obtenerMiPerfil, guardarMiPerfil, alternarVisibilidad,
   listarProyectos, editarProyecto,
+  listarAvisos, marcarAvisoLeido,
 } from './api'
 import { claimsDelToken } from './auth'
 import Aviso, { useAviso } from './Aviso'
@@ -76,6 +77,8 @@ export default function Perfil() {
           </p>
           <MisColaboraciones recibidas={colaboraciones.recibidas} enviadas={colaboraciones.enviadas} />
         </section>
+
+        <MisAvisos alFallar={setError} />
 
         <MisProyectos alAvisar={avisar} alFallar={setError} />
       </div>
@@ -219,7 +222,64 @@ function MisDatos({ datos, alGuardar, alAvisar, alFallar }) {
   )
 }
 
-/** Los proyectos propios, incluidos los ocultos. Ocultar cambia la visibilidad, no borra. */
+/**
+ * La bandeja de avisos. Cada aviso lo generó ms-notificaciones al consumir un evento: una
+ * solicitud de colaboración, un comentario, una acción de moderación.
+ */
+function MisAvisos({ alFallar }) {
+  const [avisos, setAvisos] = useState(null)
+
+  useEffect(() => { recargar() }, [])
+
+  function recargar() {
+    listarAvisos().then(setAvisos).catch(() => setAvisos([]))
+  }
+
+  const noLeidos = (avisos ?? []).filter((a) => !a.leido).length
+
+  const marcar = async (aviso) => {
+    try {
+      await marcarAvisoLeido(aviso.id)
+      recargar()
+    } catch (e) {
+      alFallar(e.message)
+    }
+  }
+
+  return (
+    <section className="tarjeta ancho-completo">
+      <div className="etiquetas">
+        <h2 style={{ margin: 0 }}>Notificaciones</h2>
+        {noLeidos > 0 && <span className="insignia no-leido">{noLeidos} sin leer</span>}
+      </div>
+      {avisos === null ? (
+        <p className="ayuda">Cargando…</p>
+      ) : avisos.length === 0 ? (
+        <p className="ayuda">No tienes avisos. Te avisaremos cuando alguien pida colaborar o comente tus proyectos.</p>
+      ) : (
+        <div>
+          {avisos.map((a) => (
+            <div key={a.id} className={a.leido ? 'aviso-item leido' : 'aviso-item'}>
+              <div className="contenido">
+                <p className="titulo">{a.titulo}</p>
+                {a.detalle && <p className="motivo">Motivo: {a.detalle}</p>}
+                <p className="ayuda">{new Date(a.creadoEn).toLocaleString('es-CL')}</p>
+              </div>
+              {!a.leido && (
+                <button className="secundario" onClick={() => marcar(a)}>Marcar como leída</button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+/**
+ * Los proyectos propios, incluidos los ocultos. Ocultar cambia la visibilidad, no borra. Un
+ * proyecto oculto por moderación solo lo ve su dueña, con el motivo, y ella no puede revertirlo.
+ */
 function MisProyectos({ alAvisar, alFallar }) {
   const [todos, setTodos] = useState(null)
   const [miOid, setMiOid] = useState(null)
@@ -281,12 +341,19 @@ function MisProyectos({ alAvisar, alFallar }) {
             <div key={p.id} className="tarjeta">
               <div className="etiquetas">
                 <span className={`insignia ${p.estado}`}>{ESTADOS[p.estado] ?? p.estado}</span>
-                <span className={p.visibilidad === 'PUBLICO' ? 'insignia propio' : 'insignia oculto'}>
-                  {p.visibilidad === 'PUBLICO' ? 'En la vitrina' : 'Fuera de la vitrina'}
-                </span>
+                {p.oculto ? (
+                  <span className="insignia moderado">Oculto por moderación</span>
+                ) : (
+                  <span className={p.visibilidad === 'PUBLICO' ? 'insignia propio' : 'insignia oculto'}>
+                    {p.visibilidad === 'PUBLICO' ? 'En la vitrina' : 'Fuera de la vitrina'}
+                  </span>
+                )}
               </div>
               <h3 style={{ fontSize: 17 }}>{p.nombre}</h3>
               <p className="ayuda">{p.resumen}</p>
+              {p.oculto && p.motivoOcultamiento && (
+                <p className="motivo-moderacion">Motivo: {p.motivoOcultamiento}</p>
+              )}
               <div className="acciones">
                 <button className="secundario" onClick={() => setEditando(p)}>Editar</button>
                 <button className="secundario" onClick={() => cambiarVisibilidad(p)}>

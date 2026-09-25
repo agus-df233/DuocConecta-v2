@@ -147,3 +147,15 @@ export const colaboracionesRecibidas = () => pedir('/api/v1/bff/colaboraciones/r
 
 /** Solicitudes que envié, con los datos de contacto de las aceptadas. */
 export const colaboracionesEnviadas = () => pedir('/api/v1/bff/colaboraciones/enviadas')
+
+// --- Notificaciones (ms-notificaciones) ---------------------------------------
+//
+// Van directo por el API Gateway, como publicar proyectos: el aviso ya viene armado por el
+// consumidor y no hay nada que componer en el BFF.
+
+/** Mis avisos, lo más nuevo primero. */
+export const listarAvisos = () => pedir('/api/v1/notificaciones')
+
+/** Marca un aviso propio como leído. */
+export const marcarAvisoLeido = (id) =>
+  pedir(`/api/v1/notificaciones/${id}/leido`, { method: 'PATCH' })

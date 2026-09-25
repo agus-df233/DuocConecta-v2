@@ -231,6 +231,17 @@ button { font: inherit; cursor: pointer; }
 .insignia.RECHAZADA      { background: var(--linea); color: var(--tinta-apagada); }
 .insignia.oculto         { background: #FFF9E8; color: #8A5A00; border: 1px solid #F2DFA8; }
 .insignia.propio         { background: #E8EFFA; color: var(--azul-claro); }
+.insignia.moderado       { background: #FDECE7; color: #A3301B; border: 1px solid #F2C4B8; }
+.insignia.no-leido       { background: #E8EFFA; color: var(--azul-claro); }
+
+/* Bandeja de avisos (EP2): cada aviso nace de un evento procesado por ms-notificaciones. */
+.aviso-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-bottom: 1px solid var(--linea); }
+.aviso-item:last-child { border-bottom: 0; }
+.aviso-item.leido { opacity: .62; }
+.aviso-item .contenido { flex: 1; min-width: 0; }
+.aviso-item .titulo { font-weight: 600; font-size: 14px; margin: 0 0 2px; }
+.aviso-item .motivo { font-size: 13px; margin: 2px 0 0; color: var(--tinta); }
+.motivo-moderacion { font-size: 13px; color: #A3301B; margin: 4px 0 0; }
 
 /* Herramientas: la marca lateral las distingue de una etiqueta de estado. */
 .chip {
