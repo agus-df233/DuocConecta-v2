@@ -1,0 +1,80 @@
+# Configuración de ms-mensajeria (EP2), el administrador de colas, tópicos y suscripciones.
+# No tiene base de datos: su estado es AWS. Ningún valor sensible está escrito aquí.
+
+server:
+  port: 8085
+
+spring:
+  application:
+    name: ms-mensajeria
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://login.microsoftonline.com/${AZURE_TENANT_ID}/v2.0
+
+duocconecta:
+  # La topología base. Aquí sirve para PROTEGERLA: estos recursos no se eliminan desde la API.
+  # Mismos nombres que en ms-notificaciones, que es quien los crea y consume.
+  mensajeria:
+    region: ${AWS_REGION:us-east-1}
+    origen: ${spring.application.name}
+    topico:
+      nombre: ${SNS_TOPICO_EVENTOS:duocconecta-eventos}
+    colas:
+      proyectos: ${SQS_COLA_PROYECTOS:duocconecta-notificaciones-proyectos}
+      colaboraciones: ${SQS_COLA_COLABORACIONES:duocconecta-notificaciones-colaboraciones}
+      auditoria: ${SQS_COLA_AUDITORIA:duocconecta-auditoria-eventos}
+    descartes:
+      proyectos: ${SQS_COLA_PROYECTOS:duocconecta-notificaciones-proyectos}-descartes
+      colaboraciones: ${SQS_COLA_COLABORACIONES:duocconecta-notificaciones-colaboraciones}-descartes
+      auditoria: ${SQS_COLA_AUDITORIA:duocconecta-auditoria-eventos}-descartes
+    no-entregados: ${SQS_COLA_NO_ENTREGADOS:duocconecta-eventos-no-entregados}
+    # Valores por defecto de las colas nuevas: los mismos de la topología base.
+    parametros:
+      retencion-trabajo-segundos: 345600
+      retencion-descartes-segundos: 1209600
+      visibilidad-segundos: 30
+      espera-segundos: 20
+      max-recepciones: 3
+
+  seguridad:
+    audiencia: ${AZURE_CLIENT_ID}
+    claims-correo:
+      - email
+      - preferred_username
+      - upn
+      - unique_name
+    claims-nombre:
+      - name
+      - given_name
+      - preferred_username
+    # App Roles de Azure AD. Se suman al rol del dominio, nunca lo reemplazan.
+    claim-roles: roles
+    # Vía B para el rol ADMINISTRADOR. El valor real va en .env o en la task definition.
+    administradores: ${ADMINISTRADORES:}
+    dominios:
+      duocuc.cl: ESTUDIANTE
+      profesor.duoc.cl: PROFESOR
+      duoc.cl: ACADEMICO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+
+logging:
+  level:
+    cl.duoc.duocconecta: ${LOG_NIVEL:INFO}
+  pattern:
+    level: "%5p [%X{idPeticion:-sin-id}]"

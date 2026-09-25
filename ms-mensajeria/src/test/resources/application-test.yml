@@ -1,0 +1,17 @@
+# Tests de ms-mensajeria: sin internet y sin AWS (los clientes se reemplazan por dobles).
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ""
+          jwk-set-uri: http://localhost:0/.well-known/jwks.json
+
+duocconecta:
+  seguridad:
+    audiencia: audiencia-de-prueba
+    dominios:
+      duocuc.cl: ESTUDIANTE
+      profesor.duoc.cl: PROFESOR
+      duoc.cl: ACADEMICO
