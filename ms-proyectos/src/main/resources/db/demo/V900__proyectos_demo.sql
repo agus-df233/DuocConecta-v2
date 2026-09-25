@@ -21,5 +21,7 @@ INSERT INTO proyecto (id, nombre, descripcion, url_repositorio, propietario_id, 
      'Proyecto personal todavía sin publicar.',
      NULL, 'demo-oid-0001', 'Plaza Oeste', 'EN_DESARROLLO', 'PRIVADO');
 
-INSERT INTO proyecto_archivos (proyecto_id, url_archivo) VALUES
-    ('aaaaaaaa-0000-0000-0000-000000000003', 'https://ejemplo.cl/panel-asistencia/capturas.pdf');
+-- V3 reemplazó proyecto_archivos por proyecto_adjunto: en una base nueva, la tabla vieja ya no existe.
+INSERT INTO proyecto_adjunto (id, proyecto_id, url_externa, nombre) VALUES
+    ('bbbbbbbb-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000003',
+     'https://ejemplo.cl/panel-asistencia/capturas.pdf', 'capturas.pdf');
