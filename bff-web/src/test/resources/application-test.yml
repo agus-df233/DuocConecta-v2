@@ -1,0 +1,25 @@
+# Configuración exclusiva de los tests del BFF.
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Se deja en blanco a propósito para tapar el valor de application.yml, que
+          # contiene el placeholder ${AZURE_TENANT_ID} y no se puede resolver aquí.
+          issuer-uri: ""
+          # Igual que en ms-usuarios: jwk-set-uri no hace llamadas de red al arrancar.
+          jwk-set-uri: http://localhost:0/.well-known/jwks.json
+
+duocconecta:
+  seguridad:
+    audiencia: audiencia-de-prueba
+    dominios:
+      duocuc.cl: ESTUDIANTE
+      profesor.duoc.cl: PROFESOR
+      duoc.cl: ACADEMICO
+  bff:
+    url-ms-usuarios: http://localhost:0
+    cors:
+      origenes:
+        - http://localhost:5173

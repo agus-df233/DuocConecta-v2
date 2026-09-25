@@ -1,0 +1,10 @@
+# Lo que NO se manda al contexto de build. Sin esto, Docker copia los target/
+# y el node_modules del front, y cada build tarda de más.
+target/
+**/target/
+frontend-web/node_modules/
+frontend-web/dist/
+.git/
+.env
+docs/
+*.md

@@ -1,0 +1,56 @@
+# --- Java / Maven ---
+target/
+*.jar
+*.war
+*.class
+.mvn/wrapper/maven-wrapper.jar
+
+# --- Secretos y configuración local ---
+# Nunca subir credenciales ni valores del tenant. Usar .env.example como plantilla.
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.jks
+*.key
+application-local.yml
+application-secrets.yml
+
+# --- Frontend (Fase 2) ---
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# --- IDE ---
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+
+# --- Sistema operativo ---
+.DS_Store
+Thumbs.db
+
+# --- Logs y temporales ---
+*.log
+logs/
+
+# --- Documentación ---
+# Se trabaja aparte del repositorio; queda solo en la máquina de cada quien.
+docs/
+GUIA-EQUIPO.md
+
+# --- Infraestructura ---
+# Identificadores de recursos AWS generados por infra/aws.sh crear.
+infra/.recursos
+
+# --- Frontend ---
+frontend-web/.env.local

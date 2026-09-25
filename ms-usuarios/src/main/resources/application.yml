@@ -1,0 +1,117 @@
+# Configuración de ms-usuarios.
+# Ningún valor sensible está escrito aquí: todo viene por variable de entorno.
+# Los valores por defecto son solo para levantar el entorno local con docker compose.
+
+server:
+  port: 8081
+
+spring:
+  application:
+    name: ms-usuarios
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/duocconecta}
+    username: ${DB_USER:duocconecta}
+    password: ${DB_PASSWORD:duocconecta}
+
+  jpa:
+    hibernate:
+      # Las tablas las crea Flyway. Hibernate solo verifica que el esquema coincida
+      # con las entidades y falla al arrancar si no.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: usuarios
+    # Se desactiva para que la sesión de base de datos no quede abierta mientras se
+    # serializa la respuesta: eso esconde consultas lentas y agota el pool.
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    schemas: usuarios
+    default-schema: usuarios
+    # En local los schemas los crea docker/postgres/init.sql, pero en RDS ese archivo
+    # no se ejecuta nunca. Sin esto, ddl-auto: validate falla al arrancar en la nube.
+    create-schemas: true
+    locations: classpath:db/migration
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Emisor del tenant de Azure AD. La versión v2.0 es obligatoria:
+          # con v1.0 la validación del emisor falla.
+          issuer-uri: https://login.microsoftonline.com/${AZURE_TENANT_ID}/v2.0
+
+duocconecta:
+  seguridad:
+    # Client-id del registro de la API en Azure AD. Es la audiencia que debe traer el token.
+    audiencia: ${AZURE_CLIENT_ID}
+
+    # Azure AD emite distintos claims según el tipo de cuenta y la configuración del tenant,
+    # por eso se prueban varios en orden en vez de depender de uno solo.
+    #
+    # 'email' va primero a propósito. En las cuentas invitadas (B2B) el UPN tiene la forma
+    # nombre_dominio.cl#EXT#@tenant.onmicrosoft.com, y el dominio real del correo institucional
+    # solo aparece en 'email'. Si 'preferred_username' fuera primero, se leería el dominio del
+    # tenant en vez del de Duoc y la asignación de rol quedaría mal.
+    claims-correo:
+      - email
+      - preferred_username
+      - upn
+      - unique_name
+
+    claims-nombre:
+      - name
+      - given_name
+      - preferred_username
+
+    # Claim con los App Roles de Azure AD. Si viene vacío, el rol se deriva del dominio.
+    claim-roles: roles
+
+    # Mapa de dominio de correo a rol. Sumar un dominio nuevo es agregar una línea aquí:
+    # no hace falta tocar el código.
+    dominios:
+      duocuc.cl: ESTUDIANTE
+      profesor.duoc.cl: PROFESOR
+      duoc.cl: ACADEMICO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Solo se expone health. El resto de los endpoints de Actuator dan información
+        # interna que no tiene por qué salir del servicio.
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    # Ordena los endpoints por método para que la documentación se lea siempre igual.
+    operationsSorter: method
+
+logging:
+  level:
+    # Se sube a DEBUG en la nube con la variable LOG_NIVEL, sin reconstruir la imagen.
+    cl.duoc.duocconecta: ${LOG_NIVEL:INFO}
+  pattern:
+    # El identificador de correlación va en cada línea: es lo que permite seguir una misma
+    # petición entre el BFF y los microservicios en un solo grupo de CloudWatch.
+    level: "%5p [%X{idPeticion:-sin-id}]"
+
+---
+# Perfil de desarrollo: agrega datos de ejemplo para poder mostrar la vitrina
+# y los filtros antes de que exista ms-proyectos.
+spring:
+  config:
+    activate:
+      on-profile: dev
+  flyway:
+    locations: classpath:db/migration,classpath:db/demo
+
+logging:
+  level:
+    cl.duoc.duocconecta: DEBUG

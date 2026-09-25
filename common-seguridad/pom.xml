@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Módulo compartido con toda la lógica de validación del JWT de Azure AD.
+  Lo usan ms-usuarios y bff-web, y lo usarán los microservicios que vengan
+  (ms-proyectos, ms-contacto), para que la regla de dominios y la validación
+  de audiencia estén en un solo lugar.
+
+  No es un servicio ejecutable: es una librería, por eso no lleva
+  spring-boot-maven-plugin.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>cl.duoc.duocconecta</groupId>
+        <artifactId>duocconecta</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>common-seguridad</artifactId>
+    <name>common-seguridad</name>
+    <description>Validación compartida del JWT de Azure AD: audiencia, roles y dominios</description>
+
+    <dependencies>
+        <!-- Resource Server: decodificación y validación del JWT. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
+        </dependency>
+
+        <!-- Necesario para @ConfigurationProperties y la autoconfiguración. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- La API de servlets se usa para escribir las respuestas 401/403 a mano.
+             La provee el contenedor en tiempo de ejecución, por eso va en scope provided. -->
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- ManejadorErroresBase traduce las violaciones de jakarta.validation.
+             La aplicación que use el módulo ya trae la implementación. -->
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- DocumentacionApi arma el objeto OpenAPI. La UI de Swagger la trae cada servicio. -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Genera los metadatos para el autocompletado de application.yml en el IDE. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+</project>

@@ -1,0 +1,45 @@
+# Configuración exclusiva de los tests de ms-proyectos.
+# El objetivo es que el contexto levante sin depender de Docker ni de internet.
+
+spring:
+  datasource:
+    # Base en memoria. El INIT crea el schema `proyectos` porque H2 no lo trae de fábrica
+    # y las entidades lo esperan.
+    url: jdbc:h2:mem:proyectos_test;INIT=CREATE SCHEMA IF NOT EXISTS proyectos;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ''
+
+  jpa:
+    hibernate:
+      # En los tests el esquema lo crea Hibernate a partir de las entidades:
+      # las migraciones de Flyway están escritas para PostgreSQL.
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        default_schema: proyectos
+
+  flyway:
+    # Se apaga porque V1__proyectos.sql usa sintaxis de PostgreSQL.
+    enabled: false
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Se deja en blanco a propósito para tapar el valor de application.yml, que
+          # contiene el placeholder ${AZURE_TENANT_ID} y no se puede resolver aquí.
+          issuer-uri: ""
+          # Se usa jwk-set-uri y NO issuer-uri a propósito: issuer-uri hace descubrimiento
+          # OIDC contra la red al arrancar el contexto, y el test fallaría sin internet.
+          # Con jwk-set-uri las claves se piden recién al validar un token, cosa que estos
+          # tests no hacen.
+          jwk-set-uri: http://localhost:0/.well-known/jwks.json
+
+duocconecta:
+  seguridad:
+    audiencia: audiencia-de-prueba
+    dominios:
+      duocuc.cl: ESTUDIANTE
+      profesor.duoc.cl: PROFESOR
+      duoc.cl: ACADEMICO

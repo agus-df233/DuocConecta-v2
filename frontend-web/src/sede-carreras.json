@@ -1,0 +1,56 @@
+{
+  "sede": "Duoc UC Viña del Mar",
+  "escuelas": [
+    {
+      "nombre": "Escuela de Informática y Telecomunicaciones",
+      "carreras": [
+        "Ingeniería en Informática",
+        "Analista Programador",
+        "Ingeniería en Redes y Telecomunicaciones"
+      ]
+    },
+    {
+      "nombre": "Escuela de Administración y Negocios",
+      "carreras": [
+        "Ingeniería en Marketing Digital",
+        "Contabilidad General mención Legislación Tributaria",
+        "Auditoría",
+        "Comercio Exterior",
+        "Ingeniería en Comercio Exterior",
+        "Ingeniería en Gestión Logística",
+        "Ingeniería en Administración mención Gestión de Personas",
+        "Ingeniería en Administración mención Innovación y Emprendimiento",
+        "Ingeniería en Administración mención Finanzas",
+        "Técnico en Administración",
+        "Técnico en Gestión Logística"
+      ]
+    },
+    {
+      "nombre": "Escuela de Salud y Bienestar",
+      "carreras": [
+        "Preparador Físico"
+      ]
+    },
+    {
+      "nombre": "Escuela de Diseño",
+      "carreras": [
+        "Ilustración para Contextos Globales",
+        "Diseño Industrial e Innovación en Productos",
+        "Diseño Gráfico",
+        "Diseño de Vestuario",
+        "Diseño de Ambientes"
+      ]
+    },
+    {
+      "nombre": "Escuela de Comunicación",
+      "carreras": [
+        "Comunicación Audiovisual",
+        "Relaciones Públicas y Comunicación Organizacional",
+        "Publicidad",
+        "Animación Digital",
+        "Ingeniería en Sonido",
+        "Tecnología en Sonido e Iluminación"
+      ]
+    }
+  ]
+}

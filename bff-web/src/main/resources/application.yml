@@ -1,0 +1,86 @@
+# Configuración del BFF.
+# Ningún valor sensible está escrito aquí: todo viene por variable de entorno.
+
+server:
+  port: 8080
+
+spring:
+  application:
+    name: bff-web
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # El BFF valida el token con el mismo emisor y la misma audiencia que los
+          # microservicios: es la primera de las tres capas de validación.
+          issuer-uri: https://login.microsoftonline.com/${AZURE_TENANT_ID}/v2.0
+
+duocconecta:
+  seguridad:
+    audiencia: ${AZURE_CLIENT_ID}
+    # 'email' va primero a propósito. En las cuentas invitadas (B2B) el UPN tiene la forma
+    # nombre_dominio.cl#EXT#@tenant.onmicrosoft.com, y el dominio real del correo institucional
+    # solo aparece en 'email'. Debe coincidir con el orden de ms-usuarios.
+    claims-correo:
+      - email
+      - preferred_username
+      - upn
+      - unique_name
+    claims-nombre:
+      - name
+      - given_name
+      - preferred_username
+    claim-roles: roles
+    dominios:
+      duocuc.cl: ESTUDIANTE
+      profesor.duoc.cl: PROFESOR
+      duoc.cl: ACADEMICO
+
+  bff:
+    url-ms-usuarios: ${MS_USUARIOS_URL:http://localhost:8081}
+    url-ms-proyectos: ${MS_PROYECTOS_URL:http://localhost:8082}
+    url-ms-contacto: ${MS_CONTACTO_URL:http://localhost:8083}
+    # Si un microservicio no responde en este tiempo, se corta y se devuelve 503
+    # en vez de dejar al frontend esperando.
+    timeout-segundos: 5
+    cors:
+      # Orígenes del frontend autorizados. Se declaran uno por uno: nunca comodines,
+      # porque eso permitiría que cualquier sitio hiciera peticiones en nombre del usuario.
+      origenes: ${CORS_ORIGENES:http://localhost:5173}
+      metodos: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+      headers: [Authorization, Content-Type]
+      max-age-segundos: 3600
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+
+logging:
+  level:
+    # Se sube a DEBUG en la nube con la variable LOG_NIVEL, sin reconstruir la imagen.
+    cl.duoc.duocconecta: ${LOG_NIVEL:INFO}
+  pattern:
+    # El identificador de correlación va en cada línea: es lo que permite seguir una misma
+    # petición entre el BFF y los microservicios en un solo grupo de CloudWatch.
+    level: "%5p [%X{idPeticion:-sin-id}]"
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+logging:
+  level:
+    cl.duoc.duocconecta: DEBUG
