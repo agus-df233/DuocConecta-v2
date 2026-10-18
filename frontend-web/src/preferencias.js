@@ -1,7 +1,7 @@
 // Preferencias de esta persona en este navegador: tamaño del texto, contraste, movimiento, avisos
-// push (y cuánto duran), proyectos escondidos y los filtros de la vitrina. Son comodidades
-// locales: si el navegador no deja guardar (ventana privada, almacenamiento bloqueado), la
-// aplicación funciona igual con los valores por defecto.
+// push (y cuánto duran) y proyectos escondidos. Son comodidades locales: si el navegador no deja
+// guardar (ventana privada, almacenamiento bloqueado), la aplicación funciona igual con los
+// valores por defecto.
 import { useCallback, useState } from 'react'
 
 const CLAVE = 'duocconecta.preferencias'
@@ -12,7 +12,6 @@ export const PREFERENCIAS_INICIALES = {
   movimiento: false,   // true = reducir movimiento
   push: true,
   escondidos: [],      // ids de proyectos que esta persona sacó de su vitrina
-  vitrina: null,       // { filtros, orden } de la última visita a la vitrina
   duracionAvisos: 0,   // 0 = 6 s · 1 = 12 s · 2 = hasta cerrarlos
 }
 

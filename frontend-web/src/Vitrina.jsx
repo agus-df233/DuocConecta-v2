@@ -11,7 +11,8 @@ import CompartirProyecto from './CompartirProyecto'
 import Confirmar from './Confirmar'
 import DetalleProyecto from './DetalleProyecto'
 import { alCambiar } from './eventos'
-import FiltrosVitrina, { SIN_FILTROS, filtrarYOrdenar } from './FiltrosVitrina'
+import { escuelaDe } from './catalogo'
+import FiltrosVitrina, { SIN_FILTROS } from './FiltrosVitrina'
 import FormularioProyecto from './FormularioProyecto'
 import PedirContacto from './PedirContacto'
 import TarjetaProyecto from './TarjetaProyecto'
@@ -20,20 +21,13 @@ import TarjetaProyecto from './TarjetaProyecto'
 // aparece solo, marcado como nuevo, sin recargar la página.
 const CADA = 20_000
 
-/**
- * `guardada` trae los filtros y el orden de la última visita; `alGuardar` los deja en las
- * preferencias del navegador, así sobreviven a recargar la página y al viaje del login.
- */
-export default function Vitrina({ foco, alUsarFoco, escondidos, alEsconder, guardada, alGuardar }) {
+export default function Vitrina({ foco, alUsarFoco, escondidos, alEsconder }) {
   const [proyectos, setProyectos] = useState(null)
   const [miOid, setMiOid] = useState(null)
   const [error, setError] = useState(null)
   const { texto: aviso, accion: accionAviso, avisar, cerrar: cerrarAviso } = useAviso()
 
-  const filtros = { ...SIN_FILTROS, ...guardada?.filtros }
-  const orden = guardada?.orden ?? 'recientes'
-  const setFiltros = (nuevos) => alGuardar({ filtros: nuevos, orden })
-  const setOrden = (nuevo) => alGuardar({ filtros, orden: nuevo })
+  const [filtros, setFiltros] = useState(SIN_FILTROS)
   const [enVivo, setEnVivo] = useState(true)
   const [nuevos, setNuevos] = useState(new Set())
   const conocidos = useRef(null)
@@ -161,7 +155,7 @@ export default function Vitrina({ foco, alUsarFoco, escondidos, alEsconder, guar
   const disponibles = useMemo(
     () => (proyectos ?? []).filter((p) => !escondidos.includes(p.id)),
     [proyectos, escondidos])
-  const visibles = filtrarYOrdenar(disponibles, filtros, orden)
+  const visibles = useMemo(() => filtrar(disponibles, filtros), [disponibles, filtros])
   const proyectoAbierto = proyectos?.find((p) => p.id === abierto?.id) ?? null
 
   if (proyectos === null) return <EsqueletoVitrina />
@@ -195,8 +189,6 @@ export default function Vitrina({ foco, alUsarFoco, escondidos, alEsconder, guar
         alCambiar={setFiltros}
         proyectos={disponibles}
         coinciden={visibles.length}
-        orden={orden}
-        alOrdenar={setOrden}
       />
 
       {escondidosAqui > 0 && (
@@ -315,4 +307,21 @@ function EsqueletoVitrina() {
       </div>
     </section>
   )
+}
+
+/**
+ * Los filtros son opcionales y se combinan. Escuela y carrera son excluyentes: el mismo
+ * desplegable pone uno u otro. No hay filtro de sede porque hoy la plataforma tiene una sola.
+ */
+function filtrar(proyectos, filtros) {
+  const buscado = filtros.texto.trim().toLowerCase()
+
+  return proyectos.filter((p) => {
+    const texto = `${p.nombre} ${p.resumen ?? ''} ${p.descripcion ?? ''}`.toLowerCase()
+    return (!buscado || texto.includes(buscado))
+      && (!filtros.escuela || escuelaDe(p.autor?.carrera) === filtros.escuela)
+      && (!filtros.carrera || p.autor?.carrera === filtros.carrera)
+      && (!filtros.herramienta || p.herramientas?.includes(filtros.herramienta))
+      && (!filtros.estado || p.estado === filtros.estado)
+  })
 }

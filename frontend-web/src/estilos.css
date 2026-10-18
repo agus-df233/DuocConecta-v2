@@ -526,38 +526,28 @@ main:has(.columnas) { max-width: 1400px; }
 }
 .chip-filtro:hover { border-color: var(--tinta-apagada); color: var(--tinta); }
 .chip-filtro.activo { border-color: var(--azul); background: var(--azul); color: var(--fondo); font-weight: 600; }
-/* Cuántos proyectos deja el chip. Uno que deja cero se atenúa, pero se puede tocar igual. */
-.chip-filtro .cantidad { margin-left: 6px; font-size: 11px; font-family: var(--mono); color: var(--tinta-apagada); }
-.chip-filtro.activo .cantidad { color: var(--barra-texto); }
-.chip-filtro.sin-resultados { color: var(--tinta-apagada); border-style: dashed; }
 
-/* --- Filtros de la vitrina --- */
+/* --- Filtros de la vitrina: buscador y desplegables en una fila, como en la EP1 --- */
 .filtros {
   background: #fff; border: 1px solid var(--borde); border-radius: 16px;
-  padding: 18px 20px; margin-bottom: 24px;
+  padding: 14px 16px; margin-bottom: 24px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
 }
-.filtros .buscador { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
-.filtros .buscador input { flex: 1; max-width: 460px; min-width: 200px; }
-.grupo-chips { display: flex; gap: 12px; align-items: baseline; padding: 7px 0; flex-wrap: wrap; }
-.grupo-chips > .rotulo, .buscador > .rotulo { width: 104px; flex: none; margin: 0; }
-.grupo-chips .chips { gap: 7px; flex: 1; }
-.filtros-pie {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-  border-top: 1px solid var(--linea); margin-top: 12px; padding-top: 13px;
+.filtros input, .filtros select {
+  padding: 10px 12px; border: 1px solid var(--borde-campo); border-radius: 9px; background: #fff;
 }
-.filtros-pie p { margin: 0; font-size: 13.5px; color: var(--tinta-suave); }
-.filtros-pie strong { color: var(--tinta); font-weight: 600; }
-/* Lo elegido, a la vista: cada filtro activo se quita con su ×. */
-.filtros-activos { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; list-style: none; margin: 0; padding: 0; flex: 1; }
-.filtro-activo {
-  display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
-  padding: 5px 8px 5px 11px; border-radius: 999px; border: 1px solid var(--azul-borde);
-  background: var(--azul-fondo); color: var(--azul-claro);
+/* Los desplegables llevan tope: un <select> toma el ancho de su opción más larga, y una carrera
+   de 60 caracteres rompería la fila. La lista abierta igual muestra el nombre completo. */
+.filtros .buscador { flex: 1 1 220px; min-width: 160px; }
+.filtros select {
+  flex: 0 1 auto; font-size: 13.5px; color: var(--tinta-media);
+  text-overflow: ellipsis; padding-right: 8px;
 }
-.filtro-activo span { font-size: 14px; line-height: 1; }
-.filtro-activo:hover { border-color: var(--azul-claro); }
-.filtros-pie .orden { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--tinta-suave); margin-left: auto; }
-.filtros-pie .orden select { width: auto; padding: 6px 10px; font-size: 13px; }
+.filtros .ancho-medio  { max-width: 230px; }
+.filtros .ancho-chico  { max-width: 170px; }
+.filtros .ancho-minimo { max-width: 150px; }
+.filtros .resumen { margin-left: auto; font-size: 13.5px; color: var(--tinta-suave); white-space: nowrap; }
+.filtros .resumen strong { color: var(--tinta); font-weight: 600; }
 
 /* La barra de filtros de la administración sigue siendo de desplegables. */
 .filtros-admin { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -950,8 +940,11 @@ label .ayuda { font-weight: 400; }
   .tarjeta { padding: 18px; }
   .titulo-pagina { gap: 12px; margin-bottom: 18px; }
   .acciones-pagina, .acciones-pagina > * { width: 100%; }
-  .filtros { padding: 14px; }
-  .grupo-chips > .rotulo, .buscador > .rotulo { width: 100%; }
+  .filtros { padding: 12px; gap: 8px; }
+  /* Los desplegables sueltan el tope y van de a dos por fila. */
+  .filtros select { flex: 1 1 calc(50% - 4px); max-width: none; }
+  .filtros .buscador { flex: 1 1 100%; }
+  .filtros .resumen { margin-left: 0; }
   .cabecera-perfil { gap: 12px; margin-bottom: 20px; }
   .cabecera-perfil .marca-grande { width: 48px; height: 48px; font-size: 18px; }
   .drawer-cabecera { padding: 14px 16px; }

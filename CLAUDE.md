@@ -339,7 +339,7 @@ Piezas de la interfaz que conviene conocer antes de tocarla:
 | `Accesibilidad.jsx` + `preferencias.js` | Tamaño del texto, alto contraste, reducir movimiento y duración de los avisos, guardados en el navegador |
 | `eventos.js` | Avisa entre pantallas que no se conocen (responder en la cabecera recarga el perfil) |
 | `enlaces.js` | Enlace directo a un proyecto: `/#proyecto-<id>`, que sobrevive al viaje del login |
-| `FiltrosVitrina.jsx` | Buscador sin tildes (proyecto, herramienta o autor), chips con su conteo, sede solo si hay más de una, filtros activos con ×, orden. Los filtros se guardan en `preferencias.js` |
+| `FiltrosVitrina.jsx` | Los filtros de la EP1, a propósito: buscador y desplegables (Escuela/Carrera en uno, Herramienta, Estado) en una sola fila. No se guardan entre visitas |
 | `Aviso.jsx` | Mensaje flotante; con una acción ("Deshacer") dura más |
 | `Alt+N` | Abre y cierra el centro de notificaciones (`aria-keyshortcuts`). Los push duran 6 s, 12 s o hasta cerrarlos, y el mouse o el foco los detiene |
 

@@ -104,8 +104,6 @@ export default function App() {
             alUsarFoco={usarFoco}
             escondidos={preferencias.escondidos}
             alEsconder={(escondidos) => cambiarPreferencias({ escondidos })}
-            guardada={preferencias.vitrina}
-            alGuardar={(vitrina) => cambiarPreferencias({ vitrina })}
           />
         )}
         {vista === 'perfil' && (
