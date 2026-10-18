@@ -25,8 +25,8 @@ Todo eso sigue vigente en la v2 y **no se toca**: la mensajería se suma encima.
 
 **Mensajería asíncrona** sin afectar la lógica existente: colas con DLQ, productores y
 consumidores con confirmación explícita, y un **microservicio administrador** con API REST. El
-broker es **Amazon SQS**, con **SNS** como exchange topic (ver §12). La pauta está escrita para
-RabbitMQ; la traducción indicador por indicador está en §12.
+plataforma usa **dos brokers a la vez**: **Amazon SQS** con **SNS** como exchange topic, y
+**RabbitMQ** (clúster de 2 nodos). Ver §12.
 
 Este repositorio nació como **copia del código de la EP1** (rama `developer`, `1b205d2`), sin su
 historial ni sus remotes. El repositorio de la EP1 no se modifica.
@@ -57,8 +57,17 @@ porque los cuatro comparten una tarea de Fargate: Cloud Map no está disponible 
 **Lo que no cambia es lo que la EP1 evalúa:** el token se valida **tres veces** —API Gateway, BFF
 y microservicio— y el frontend sigue hablando solo con el BFF.
 
-**IDaaS: Azure AD (Microsoft Entra ID)** con flujo **OIDC Authorization Code + PKCE**.
-La aplicación nunca almacena contraseñas.
+**IDaaS, dos proveedores** (EP2), ambos con **OIDC Authorization Code + PKCE**:
+- **Microsoft Entra ID** para la cuenta Duoc ("Entrar con Microsoft"): MSAL, access token de la API.
+- **Amazon Cognito** solo para **Google** ("Entrar con Google"): oidc-client-ts, ID token
+  (Cognito no pone `aud` en el access token; el ID token sí, y trae `email`).
+
+La aplicación nunca almacena contraseñas. El backend acepta los dos emisores con
+`DecodificadorMultiEmisor` (common-seguridad): lee `iss` sin confiar en él solo para elegir y
+valida firma, vigencia, emisor y audiencia **con las claves y la audiencia de ese emisor**. El API
+Gateway lo hace con un **autorizador Lambda** (`infra/autorizador/index.mjs`, sin dependencias),
+porque un autorizador JWT nativo acepta un solo emisor. Con la Lambda, sin token → 401 y token
+inválido → 403 en el gateway; el backend responde 401 igual.
 
 - El **frontend** nunca llama a los microservicios directamente: solo conoce al BFF.
 - El **API Gateway** valida el token y enruta; es lo primero que ve una petición.
@@ -143,8 +152,23 @@ Un dominio no autorizado queda sin permisos aunque traiga el App Role o esté en
 vive en `ConversorRolesJwt`; las expresiones `@PreAuthorize` compartidas, en `ReglasDeAcceso`
 (`ROLES_DE_LA_PLATAFORMA`, `SOLO_ADMINISTRADOR`).
 
+**Cuentas de Google (EP2).** Entran por **Amazon Cognito**, que federa a Google (user pool
+`duocconecta-usuarios`, `aws.sh cognito`; guía en `docs/guia-cognito-google.md`). Entra ID no se
+toca. Su dominio (`gmail.com`) **no** se agrega al mapa: cualquiera con Gmail que lograra entrar
+tendría acceso. En cambio, cada cuenta se anota con su rol en
+`duocconecta.seguridad.correos-permitidos: ${CORREOS_PERMITIDOS:}` (`correo=ROL`, separados por
+coma). La comparación es exacta, el correo de la lista tiene prioridad sobre su dominio, una
+entrada mal escrita detiene el arranque y `ADMINISTRADOR` no se acepta ahí (para eso está la
+lista de administradores). Fuera de la lista, un Gmail sigue recibiendo 403.
+
+- Emisor adicional en `duocconecta.seguridad.emisores-adicionales` (`COGNITO_ISSUER_URI`,
+  `COGNITO_AUDIENCIA`). Vacíos = solo Microsoft, como en local sin Cognito.
+- Para Cognito se exige **`email_verified = true`** (por emisor: Entra ID no emite ese claim).
+- Roles del token: `claims-roles: [roles, cognito:groups]` (App Roles de Entra + grupos de Cognito).
+
 La lógica vive **centralizada y configurable** en `ResolvedorRol` + `PropiedadesSeguridad`
-(`duocconecta.seguridad.dominios` en `application.yml`), porque pueden sumarse dominios.
+(`duocconecta.seguridad.dominios` y `correos-permitidos` en `application.yml`), porque pueden
+sumarse dominios y cuentas.
 
 **Regla crítica:** el match del dominio es **exacto sobre el texto después del último `@`**, nunca
 `endsWith`. Con `endsWith`, `alguien@profesor.duoc.cl` haría match también con `duoc.cl` y quedaría
@@ -152,11 +176,13 @@ clasificado mal según el orden de iteración del mapa.
 
 ### Fuera de alcance
 
-- **Construido en la EP2:** notificaciones (SQS/SNS), moderación de la vitrina, rol `ADMINISTRADOR`.
+- **Construido en la EP2:** notificaciones (SQS/SNS y RabbitMQ), moderación de la vitrina, rol
+  `ADMINISTRADOR`, vista de administración con dashboard en el frontend, cuentas de Google por lista.
 - **No generar todavía (EP3 o v3):** `ms-prompts`, `ms-publicaciones`, Kafka, correo real con SES,
-  patrón outbox, panel de administración en el frontend, moderación de colaboraciones.
-- **RabbitMQ:** solo si se confirma que la EP2 pide dos brokers. Iría detrás de la misma interfaz
-  `PublicadorEventos`, sin tocar el negocio.
+  patrón outbox, moderación de colaboraciones.
+- **RabbitMQ:** el diseño nació en el repositorio de Javiera y se portó aquí como **segundo
+  broker** detrás de `PublicadorEventos`, sin tocar el negocio (§12.1). Su repositorio sigue
+  siendo de ella; aquí no se copió su cambio a Java 25.
 
 ---
 
@@ -278,7 +304,8 @@ DuocConecta/
 ├── pom.xml                 # parent (packaging pom), versiones centralizadas
 ├── docker-compose.yml      # 1 contenedor postgres:16.15-alpine
 ├── docker/postgres/init.sql
-├── docs/azure-entra-id.md  # guía del IDaaS (fuera del repositorio, a propósito)
+├── docs/azure-entra-id.md  # guía del IDaaS de Microsoft (fuera del repositorio, a propósito)
+│                           # docs/guia-cognito-google.md: login con Google (también local)
 │
 │   # Los módulos, del frontend hacia adentro. En GitLab se ven en orden
 │   # alfabético: Git ordena así las entradas del árbol y no se puede cambiar.
@@ -295,12 +322,29 @@ DuocConecta/
 └── infra/                  # aws.sh y la definición de la tarea de ECS
 ```
 
-**Frontend.** Dos pantallas dentro de la aplicación (`Vitrina` y `Perfil`) más el diagnóstico del
-token, que vive en el menú de la cuenta. Las solicitudes de colaboración están **dentro de Perfil**
+**Frontend.** Dos pantallas dentro de la aplicación (`Vitrina` y `Perfil`), más `Administración`
+solo para `ADMINISTRADOR`. Ya no hay pantalla de diagnóstico del token: para mostrar el JWT en la
+demo se usa DevTools (pestaña Red, cabecera `Authorization`) y jwt.ms. Las solicitudes de colaboración están **dentro de Perfil**
 y no en una vista aparte: son datos personales, no de la vitrina. El diseño sigue al prototipo
-aprobado y vive en clases de `estilos.css`, nunca en estilos en línea. `catalogo.js` concentra
-carreras, sedes, estados e iniciales: es el archivo que se cambia cuando llegue el listado oficial
-de carreras de la sede Viña del Mar.
+aprobado (**DuocConecta v2**) y vive en clases de `estilos.css`, nunca en estilos en línea; los
+colores son variables en `:root`. `catalogo.js` concentra carreras, sedes, estados, iniciales y los
+tipos de aviso: es el archivo que se cambia cuando llegue el listado oficial de carreras.
+
+Piezas de la interfaz que conviene conocer antes de tocarla:
+
+| Pieza | Qué hace |
+|---|---|
+| `CentroNotificaciones.jsx` | Consulta los avisos cada 20 s; lo nuevo sale como push. Las solicitudes pendientes se responden ahí |
+| `Ventana.jsx` | Toda ventana modal pasa por aquí: Esc cierra, el foco queda atrapado y vuelve al cerrar |
+| `Accesibilidad.jsx` + `preferencias.js` | Tamaño del texto, alto contraste, reducir movimiento y duración de los avisos, guardados en el navegador |
+| `eventos.js` | Avisa entre pantallas que no se conocen (responder en la cabecera recarga el perfil) |
+| `enlaces.js` | Enlace directo a un proyecto: `/#proyecto-<id>`, que sobrevive al viaje del login |
+| `FiltrosVitrina.jsx` | Buscador sin tildes (proyecto, herramienta o autor), chips con su conteo, sede solo si hay más de una, filtros activos con ×, orden. Los filtros se guardan en `preferencias.js` |
+| `Aviso.jsx` | Mensaje flotante; con una acción ("Deshacer") dura más |
+| `Alt+N` | Abre y cierra el centro de notificaciones (`aria-keyshortcuts`). Los push duran 6 s, 12 s o hasta cerrarlos, y el mouse o el foco los detiene |
+
+**La biblioteca de prompts no se construye aquí:** es de la v3. En la cabecera queda solo el ítem
+apagado "Prompts · Pronto".
 
 `ms-proyectos` y `ms-contacto` nacieron como repositorios aparte (`ms-repositorios` y
 `ms-contacto`) y se integraron al monorepo: se les cambió el paquete a `cl.duoc.duocconecta.*`, se
@@ -361,6 +405,7 @@ Ver `README.md` para las variables de entorno y `docs/azure-entra-id.md` para co
 | `POST /api/v1/proyectos/{id}/comentarios` | Comenta; comentar no comparte datos de contacto |
 | `POST /api/v1/colaboraciones` | Pide contacto a otra persona |
 | `PATCH /api/v1/colaboraciones/{id}/responder` | Acepta o rechaza; solo el destinatario |
+| `PATCH /api/v1/colaboraciones/{id}/retirar` | La retira quien la pidió, solo si sigue pendiente (409 si no). `RETIRADA` libera el cupo del proyecto |
 | `GET /api/v1/colaboraciones/recibidas` | Bandeja de entrada |
 | `GET /api/v1/colaboraciones/enviadas` | Bandeja de salida, con los datos ya compartidos |
 
@@ -372,6 +417,11 @@ Ver `README.md` para las variables de entorno y `docs/azure-entra-id.md` para co
 | `GET /api/v1/bff/vitrina` | Suma a cada proyecto **quién lo publicó** (nombre, carrera, sede), que ms-proyectos no sabe. Es lo que permite filtrar la vitrina por carrera |
 | `GET`/`POST /api/v1/bff/vitrina/{id}/comentarios` | Suma el nombre de quien escribió cada comentario |
 | `/api/v1/bff/colaboraciones/**` | Al aceptar, el BFF lee el perfil de quien acepta y arma con él los datos de contacto, en vez de pedirle que los escriba a mano |
+| `GET /api/v1/bff/admin/resumen` | Dashboard de administración: junta las estadísticas de ms-usuarios y ms-proyectos y cuenta los proyectos **por carrera** con `ResolvedorAutores`. No reenvía los `oid` de las dueñas |
+
+`mi-perfil` devuelve también `roles`, los roles efectivos que calculó el BFF. El frontend los usa
+para mostrar la vista de administración: el App Role viaja en el token, pero la lista
+`ADMINISTRADORES` solo existe en el backend.
 
 Publicar, editar y borrar un proyecto sí van directo a `ms-proyectos`: ahí no hay nada que
 componer y pasar por el BFF sería una capa de más. La traducción de identificador a persona la
@@ -436,9 +486,16 @@ Navegador          API Gateway HTTP API      ALB          ECS Fargate — 1 tare
                                                           ├── ms-usuarios       :8081  → RDS PostgreSQL
                                                           ├── ms-proyectos      :8082  ─┐ publican en
                                                           ├── ms-contacto       :8083  ─┘ SNS (EP2)
-                                                          ├── ms-notificaciones :8084  ← consume SQS
-                                                          └── ms-mensajeria     :8085  → administra SQS/SNS
+                                                          ├── ms-notificaciones :8084  ← consume SQS y RabbitMQ
+                                                          └── ms-mensajeria     :8085  → administra los dos brokers
+
+EC2 duocconecta-rabbitmq (t3.small) — docker-compose: rabbit1 :5672 + rabbit2 :5673, clúster de 2 nodos
 ```
+
+ms-mensajeria va en un **servicio de ECS aparte** (`SERVICIOS_APARTE`): un servicio admite como
+máximo 5 target groups. RabbitMQ va en una **EC2** porque Amazon MQ no está habilitado en el lab;
+`make apagar` la detiene y `make iniciar` la enciende. Sin la EC2, `desplegar` deja
+`RABBITMQ_HABILITADA=false` y la plataforma sigue solo con SNS/SQS.
 
 Con varias JVM en la misma tarea (seis desde la EP2) hay tres cosas que **no se ajustan solas** y que costaron un
 despliegue entero de depuración:
@@ -511,7 +568,7 @@ solos: `make apagar` solo baja las tareas de Fargate.
 
 ---
 
-## 12. Mensajería (EP2): Amazon SNS + SQS
+## 12. Mensajería (EP2): Amazon SNS + SQS y RabbitMQ
 
 **Por qué SNS además de SQS.** SQS no tiene exchange: una cola es un buzón punto a punto, sin
 routing keys ni comodines. El tópico SNS hace de exchange topic: recibe cada evento una vez y
@@ -527,7 +584,7 @@ cada cola ─► <cola>-descartes (DLQ, tras 3 recepciones) · lo que SNS no ent
 
 **Catálogo** (única fuente: `TiposDeEvento`): `proyecto.publicado`, `.actualizado`, `.eliminado`,
 `.comentado`, `.colaborador_agregado`, `.ocultado`, `.restaurado`, `.comentario_eliminado`;
-`colaboracion.solicitada`, `.aceptada`, `.rechazada`. En minúsculas y **sin tildes**: el filtro
+`colaboracion.solicitada`, `.aceptada`, `.rechazada`, `.retirada`. En minúsculas y **sin tildes**: el filtro
 compara texto exacto y una tilde hace que el evento no le llegue a nadie, sin error.
 
 **Reglas:**
@@ -573,10 +630,66 @@ deja en el log cuándo llega algo. Así lo descartado se revisa y se devuelve co
   no podría escribir.
 
 **Administración (solo `ADMINISTRADOR`):** `ms-mensajeria` en `/api/v1/mensajeria/{colas,topicos,suscripciones}`
+y `/api/v1/mensajeria/rabbit/{colas,exchanges,bindings}`
 (crear, listar, purgar, redrive, eliminar; la topología base está protegida y responde 409), y
 `ms-notificaciones` en `/api/v1/notificaciones/admin/{descartes,consumidores}` (estado de las
-DLQ, y pausa o reanudación de los consumidores para demostrar el desacoplamiento).
+DLQ de los dos brokers, y pausa o reanudación de los consumidores para demostrar el
+desacoplamiento). **La pausa detiene SQS y RabbitMQ a la vez**: si parara solo uno, el otro
+entregaría el mismo evento y el aviso llegaría igual. En RabbitMQ, listar devuelve la topología
+base (AMQP no lista colas), y el redrive mueve desde `<cola>.descartes` hasta 100 mensajes por
+llamada, confirmando cada uno en la DLQ solo después de publicarlo en su cola. La API de
+`ms-mensajeria` solo toca colas con el prefijo `duocconecta-`: una cola ajena responde 400 sin
+llegar a AWS.
 
 **Moderación (solo `ADMINISTRADOR`), en `/api/v1/proyectos/admin`:** listar todo, ocultar con
 motivo, mostrar, borrar proyectos y borrar comentarios. Ocultar es una marca aparte
 (`V4__moderacion.sql`), no un cambio de visibilidad: la dueña no puede revertirla con un PUT.
+
+**Vista de administración (frontend):** `Administracion.jsx`, con las pestañas Resumen
+(dashboard de `bff/admin/resumen` más `usuarios/admin/estadisticas` y
+`proyectos/admin/estadisticas`), Proyectos (moderación) y Comentarios. Las barras son CSS puro, sin
+librerías. El botón solo aparece si `mi-perfil.roles` incluye `ADMINISTRADOR`; la protección real
+es el 403 de cada ruta `/admin`.
+
+### 12.1 El segundo broker: RabbitMQ
+
+Los servicios publican cada evento **en los dos brokers** (`PublicadorCompuesto`: si uno falla, el
+otro igual publica; solo se propaga el error si fallan todos). El consumidor es el mismo
+`ProcesadorDeMensajes`; cada broker cumple la decisión con su `Confirmacion` (`ConfirmacionSqs`,
+`ConfirmacionRabbit`). Los consumidores de RabbitMQ usan **el mismo nombre** que los de SQS, así la
+tabla `evento_procesado` hace que el evento duplicado entre brokers se procese **una vez**.
+
+```
+ms-proyectos ─┐                                    routing key      cola quorum
+              ├─► exchange topic duocconecta.eventos ─┬─ proyecto.#     ─► duocconecta.notificaciones.proyectos
+ms-contacto ──┘   (routing key = tipo del evento)    ├─ colaboracion.# ─► duocconecta.notificaciones.colaboraciones
+                                                     └─ #              ─► duocconecta.auditoria
+cada cola ─(rechazo o x-delivery-limit)─► DLX direct duocconecta.dlx ─► <cola>.descartes
+```
+
+| Caso | RabbitMQ |
+|---|---|
+| Procesado o duplicado | `basicAck` |
+| Error recuperable | `basicNack(requeue=true)`; la cola quorum cuenta la entrega |
+| Tercera entrega fallida | `x-delivery-limit` la manda al DLX → `<cola>.descartes` (`x-first-death-reason = delivery_limit`) |
+| No recuperable | `basicNack(requeue=false)` → DLX al tiro (`x-first-death-reason = rejected`) |
+
+**Reglas y trampas:**
+
+- Nombres con **punto** (`duocconecta.`), no guion: en RabbitMQ el punto separa palabras de la
+  routing key. La configuración vive en `duocconecta.mensajeria.rabbit.*` del `application.yml`.
+- **`x-delivery-limit` cuenta devoluciones, no entregas**: para 3 entregas va en 2
+  (`maxEntregas - 1`). Con 3 se ven 4 intentos antes de la DLQ.
+- Una cola ya declarada **no acepta otros argumentos**: RabbitMQ responde `PRECONDITION_FAILED`.
+  Cambiar el límite exige borrar la cola (en local, con `rabbitmqctl delete_queue`).
+- Solo colas **quorum** (`default_queue_type = quorum`): se replican en los dos nodos.
+- Credenciales y cookie de Erlang en Secrets Manager (`duocconecta/rabbitmq`); el puerto AMQP solo
+  acepta a las tareas de Fargate y la consola, solo la IP de quien corrió `make rabbitmq`.
+- `management.health.rabbit.enabled: false`: un RabbitMQ caído no debe hacer que el ALB dé por
+  muerto un servicio que sigue atendiendo con SNS/SQS.
+- `spring.rabbitmq.connection-timeout: 2s`: se publica después del commit **en el hilo de la
+  petición**. Con el valor por defecto (60 s por dirección), la EC2 apagada dejaba colgada cada
+  escritura hasta que el API Gateway cortaba a los 30 s, aunque el cambio ya estuviera guardado.
+- **Límite conocido del clúster de 2 nodos:** una cola quorum necesita mayoría (2 de 2). Replica los
+  datos en los dos nodos, pero si uno cae las colas dejan de aceptar mensajes hasta que vuelve; en
+  ese lapso los eventos siguen llegando por SNS/SQS. Tolerar la caída de un nodo exige un tercero.
