@@ -41,7 +41,13 @@ export default function App() {
   const [vista, setVista] = useState('vitrina')
   const [foco, setFoco] = useState(destinoInicial)
 
-  useEffect(() => alCambiarSesion(setCuenta), [])
+  // MSAL avisa ACQUIRE_TOKEN_SUCCESS en cada token pedido, incluso de caché, y cada aviso trae un
+  // objeto de cuenta nuevo. Si se guardara tal cual, todo efecto que dependa de la cuenta volvería
+  // a correr, pediría un token y generaría otro aviso: un bucle de cientos de peticiones por segundo.
+  // Por eso la cuenta solo se reemplaza cuando cambia la persona.
+  useEffect(() => alCambiarSesion((nueva) =>
+    setCuenta((actual) => (actual?.username === nueva?.username ? actual : nueva))), [])
+  const usuario = cuenta?.username
 
   // Las preferencias de accesibilidad van en <html>: así alcanzan también al login y a las ventanas.
   useEffect(() => {
@@ -53,12 +59,13 @@ export default function App() {
 
   // Los roles salen del BFF y no del token: la lista de administradores solo existe en el backend.
   // Ocultar el botón es comodidad; quien protege de verdad es el 403 de cada ruta /admin.
+  // Depende del correo (un texto) y no del objeto de cuenta, por la misma razón.
   useEffect(() => {
-    if (!cuenta) return
+    if (!usuario) return
     obtenerMiPerfil()
       .then((p) => setEsAdministrador((p.roles ?? []).includes('ADMINISTRADOR')))
       .catch(() => setEsAdministrador(false))
-  }, [cuenta])
+  }, [usuario])
 
   /** Lleva a una vista y, si corresponde, a lo que hay que abrir en ella. */
   const irA = useCallback((nuevaVista, nuevoFoco = null) => {
