@@ -1,22 +1,34 @@
-// Pantalla de perfil: datos propios, avisos, solicitudes y proyectos publicados.
-// Las solicitudes están aquí y no en una vista aparte porque son información privada.
+// Pantalla de perfil: datos propios, solicitudes, colaboraciones, preferencias de notificación y
+// proyectos publicados. Las solicitudes están aquí y no en una vista aparte porque son información privada.
 import { useEffect, useMemo, useState } from 'react'
 import {
   obtenerMiPerfil, guardarMiPerfil, alternarVisibilidad,
-  listarProyectos, editarProyecto,
-  listarAvisos, marcarAvisoLeido,
+  listarProyectos, editarProyecto, retirarColaboracion,
 } from './api'
 import { claimsDelToken } from './auth'
 import Aviso, { useAviso } from './Aviso'
+import Confirmar from './Confirmar'
+import { avisarCambio } from './eventos'
 import FormularioProyecto from './FormularioProyecto'
 import AceptarSolicitud from './AceptarSolicitud'
+import Interruptor from './Interruptor'
 import { MisColaboraciones, MisSolicitudes, responder, useColaboraciones } from './Solicitudes'
 import { ESCUELAS, ESTADOS, SEDES, SIN_CARRERA, iniciales } from './catalogo'
 
-export default function Perfil() {
+// Qué sección del perfil corresponde a cada destino de un aviso.
+const SECCIONES = {
+  recibidas: 'seccion-solicitudes',
+  enviadas: 'seccion-solicitudes',
+  colaboraciones: 'seccion-colaboraciones',
+  preferencias: 'seccion-preferencias',
+  'mis-proyectos': 'seccion-proyectos',
+}
+
+export default function Perfil({ foco, alUsarFoco, preferencias, cambiarPreferencias }) {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
   const { texto: aviso, avisar } = useAviso()
+  const [pestana, setPestana] = useState('recibidas')
 
   const colaboraciones = useColaboraciones()
 
@@ -24,8 +36,33 @@ export default function Perfil() {
     obtenerMiPerfil().then(setDatos).catch((e) => setError(e.message))
   }, [])
 
+  // Un aviso puede traer a una sección: se elige la pestaña y se baja hasta ella cuando ya se pintó.
+  useEffect(() => {
+    if (!foco?.seccion || !datos) return
+    if (foco.seccion === 'recibidas' || foco.seccion === 'enviadas') setPestana(foco.seccion)
+    const destino = document.getElementById(SECCIONES[foco.seccion] ?? '')
+    destino?.scrollIntoView({ behavior: preferencias.movimiento ? 'auto' : 'smooth', block: 'start' })
+    destino?.focus({ preventScroll: true })
+    alUsarFoco()
+  }, [foco, datos, alUsarFoco, preferencias.movimiento])
+
   // Aceptar abre la ventana de consentimiento; rechazar no comparte nada y va directo.
   const [aceptando, setAceptando] = useState(null)
+  // Retirar pide confirmación: la otra persona ya no podrá responder.
+  const [retirando, setRetirando] = useState(null)
+
+  const retirarSolicitud = async () => {
+    try {
+      await retirarColaboracion(retirando.id)
+      avisar('Retiraste tu solicitud. Puedes volver a pedirla cuando quieras.')
+      // Recarga las bandejas aquí, el botón de la vitrina y las pendientes de la cabecera.
+      avisarCambio('colaboraciones')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setRetirando(null)
+    }
+  }
 
   const responderSolicitud = async (solicitud, aceptar, compartirTelefono = false) => {
     try {
@@ -41,44 +78,47 @@ export default function Perfil() {
     }
   }
 
-  if (error && !datos) return <div className="error">{error}</div>
-  if (!datos) return <div className="cargando">Cargando tu perfil…</div>
+  if (error && !datos) return <div className="error" role="alert">{error}</div>
+  if (!datos) return <div className="cargando" aria-busy="true">Cargando tu perfil…</div>
 
   const { perfil } = datos
 
   return (
     <section>
       <div className="cabecera-perfil">
-        <div className="marca-grande">{iniciales(perfil.nombre)}</div>
+        <div className="marca-grande" aria-hidden="true">{iniciales(perfil.nombre)}</div>
         <div>
           <h1>{perfil.nombre}</h1>
-          <p>{[perfil.carrera, perfil.sede].filter(Boolean).join(' · ') || 'Completa tu carrera y sede'}</p>
+          <p>{[perfil.carrera, perfil.sede && `Sede ${perfil.sede}`].filter(Boolean).join(' · ') || 'Completa tu carrera y sede'}</p>
         </div>
       </div>
 
-      {error && <div className="error">{error}</div>}
+      {error && <div className="error" role="alert">{error}</div>}
 
       <div className="columnas">
         <MisDatos datos={datos} alGuardar={setDatos} alAvisar={avisar} alFallar={setError} />
 
-        <section className="tarjeta">
-          <h2>Mis solicitudes</h2>
-          {colaboraciones.error && <div className="error">{colaboraciones.error}</div>}
+        <section className="tarjeta" id="seccion-solicitudes" tabIndex={-1} aria-labelledby="titulo-solicitudes">
+          <h2 id="titulo-solicitudes">Mis solicitudes</h2>
+          {colaboraciones.error && <div className="error" role="alert">{colaboraciones.error}</div>}
           <MisSolicitudes
+            pestana={pestana}
+            alCambiarPestana={setPestana}
             recibidas={colaboraciones.recibidas}
             enviadas={colaboraciones.enviadas}
             alResponder={(s, aceptar) =>
               (aceptar ? setAceptando(s) : responderSolicitud(s, false))}
+            alRetirar={setRetirando}
           />
 
-          <h2 style={{ marginTop: 26, marginBottom: 6 }}>Mis colaboraciones</h2>
-          <p className="ayuda" style={{ marginBottom: 14 }}>
-            Contactos desbloqueados por consentimiento mutuo.
-          </p>
-          <MisColaboraciones recibidas={colaboraciones.recibidas} enviadas={colaboraciones.enviadas} />
+          <div id="seccion-colaboraciones" tabIndex={-1}>
+            <h2 className="titulo-seguido">Mis colaboraciones</h2>
+            <p className="ayuda">Contactos desbloqueados por consentimiento mutuo.</p>
+            <MisColaboraciones recibidas={colaboraciones.recibidas} enviadas={colaboraciones.enviadas} />
+          </div>
         </section>
 
-        <MisAvisos alFallar={setError} />
+        <PreferenciasDeAviso preferencias={preferencias} alCambiar={cambiarPreferencias} />
 
         <MisProyectos alAvisar={avisar} alFallar={setError} />
       </div>
@@ -90,6 +130,18 @@ export default function Perfil() {
             responderSolicitud(aceptando, true, compartirTelefono)}
           alCerrar={() => setAceptando(null)}
         />
+      )}
+
+      {retirando && (
+        <Confirmar
+          titulo="Retirar solicitud"
+          textoAccion="Retirar solicitud"
+          alConfirmar={retirarSolicitud}
+          alCerrar={() => setRetirando(null)}
+        >
+          {retirando.solicitado?.nombre?.split(' ')[0] ?? 'La otra persona'} ya no podrá responderla y
+          tus datos de contacto no se compartirán. Si cambias de idea, puedes volver a pedirla.
+        </Confirmar>
       )}
 
       <Aviso texto={aviso} />
@@ -138,8 +190,8 @@ function MisDatos({ datos, alGuardar, alAvisar, alFallar }) {
   }
 
   return (
-    <section className="tarjeta">
-      <h2>Mis datos</h2>
+    <section className="tarjeta" aria-labelledby="titulo-datos">
+      <h2 id="titulo-datos">Mis datos</h2>
 
       <form onSubmit={enviar}>
         <label>
@@ -184,12 +236,12 @@ function MisDatos({ datos, alGuardar, alAvisar, alFallar }) {
         {/* Este bloque es la promesa central de la plataforma, así que se explica donde se
             escriben los datos y no en una ayuda perdida en otra pantalla. */}
         <div className="consentimiento">
-          <h4>Datos que se comparten solo cuando tú aceptas</h4>
+          <h4><span className="candado" aria-hidden="true" />Datos que se comparten solo cuando aceptas</h4>
           <p>
             Tu teléfono y tus redes no aparecen en la vitrina ni en las búsquedas. Se muestran
             únicamente a las personas cuya solicitud de colaboración aceptas.
           </p>
-          <label style={{ marginBottom: 12 }}>
+          <label>
             Teléfono (opcional)
             <input name="telefono" placeholder="+56 9 …" defaultValue={perfil.telefono ?? ''} />
           </label>
@@ -206,72 +258,55 @@ function MisDatos({ datos, alGuardar, alAvisar, alFallar }) {
         </div>
       </form>
 
-      <button
-        type="button"
-        className={perfil.visible ? 'interruptor' : 'interruptor encendido'}
-        onClick={cambiarVisibilidad}
-      >
-        <span className="riel"><span className="perilla" /></span>
-        <span>
-          {perfil.visible
-            ? 'Perfil visible en las búsquedas. Actívalo para ocultarlo.'
-            : 'Tu perfil está oculto: no apareces en las búsquedas ni en los listados de personas.'}
-        </span>
-      </button>
+      <Interruptor
+        tarjeta
+        activo={!perfil.visible}
+        alCambiar={cambiarVisibilidad}
+        texto="Ocultar mi perfil"
+        descripcion={perfil.visible
+          ? 'Tu perfil aparece en las búsquedas. Actívalo para ocultarlo.'
+          : 'Tu perfil está oculto: no apareces en las búsquedas ni en los listados de personas.'}
+      />
     </section>
   )
 }
 
 /**
- * La bandeja de avisos. Cada aviso lo generó ms-notificaciones al consumir un evento: una
- * solicitud de colaboración, un comentario, una acción de moderación.
+ * Por dónde avisamos. El aviso en la plataforma no se apaga: es donde quedan las solicitudes. Los
+ * push son las tarjetas emergentes mientras la aplicación está abierta. El correo llega con SES en
+ * una entrega siguiente y por eso no aparece aquí.
  */
-function MisAvisos({ alFallar }) {
-  const [avisos, setAvisos] = useState(null)
-
-  useEffect(() => { recargar() }, [])
-
-  function recargar() {
-    listarAvisos().then(setAvisos).catch(() => setAvisos([]))
-  }
-
-  const noLeidos = (avisos ?? []).filter((a) => !a.leido).length
-
-  const marcar = async (aviso) => {
-    try {
-      await marcarAvisoLeido(aviso.id)
-      recargar()
-    } catch (e) {
-      alFallar(e.message)
-    }
-  }
-
+function PreferenciasDeAviso({ preferencias, alCambiar }) {
   return (
-    <section className="tarjeta ancho-completo">
-      <div className="etiquetas">
-        <h2 style={{ margin: 0 }}>Notificaciones</h2>
-        {noLeidos > 0 && <span className="insignia no-leido">{noLeidos} sin leer</span>}
+    <section className="tarjeta ancho-completo" id="seccion-preferencias" tabIndex={-1} aria-labelledby="titulo-preferencias">
+      <h2 id="titulo-preferencias">Notificaciones</h2>
+      <p className="ayuda">
+        Elige cómo te avisamos cuando alguien quiere colaborar, responde tu solicitud o comenta tus proyectos.
+      </p>
+      <div className="canales">
+        <Interruptor
+          tarjeta
+          activo
+          deshabilitado
+          alCambiar={() => {}}
+          texto="En la plataforma"
+          descripcion="Centro de notificaciones y contador. Siempre activo."
+        />
+        <Interruptor
+          tarjeta
+          activo={preferencias.push}
+          alCambiar={(push) => alCambiar({ push })}
+          texto="Avisos push"
+          descripcion="Tarjeta emergente mientras usas DuocConecta."
+        />
       </div>
-      {avisos === null ? (
-        <p className="ayuda">Cargando…</p>
-      ) : avisos.length === 0 ? (
-        <p className="ayuda">No tienes avisos. Te avisaremos cuando alguien pida colaborar o comente tus proyectos.</p>
-      ) : (
-        <div>
-          {avisos.map((a) => (
-            <div key={a.id} className={a.leido ? 'aviso-item leido' : 'aviso-item'}>
-              <div className="contenido">
-                <p className="titulo">{a.titulo}</p>
-                {a.detalle && <p className="motivo">Motivo: {a.detalle}</p>}
-                <p className="ayuda">{new Date(a.creadoEn).toLocaleString('es-CL')}</p>
-              </div>
-              {!a.leido && (
-                <button className="secundario" onClick={() => marcar(a)}>Marcar como leída</button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="estados-aviso">
+        <span>Cada aviso pasa por tres estados:</span>
+        <span className="paso">Publicado</span>
+        <span className="paso">En cola</span>
+        <span className="paso">Entregado</span>
+        <span>La entrega es asíncrona y puede tardar unos segundos.</span>
+      </div>
     </section>
   )
 }
@@ -287,7 +322,7 @@ function MisProyectos({ alAvisar, alFallar }) {
 
   // El oid del token es lo que dice qué proyectos son propios.
   useEffect(() => {
-    claimsDelToken().then((c) => setMiOid(c.oid)).catch(() => setMiOid(null))
+    claimsDelToken().then((c) => setMiOid(c.oid ?? c.sub)).catch(() => setMiOid(null))
   }, [])
 
   useEffect(() => { recargar() }, [])
@@ -325,11 +360,9 @@ function MisProyectos({ alAvisar, alFallar }) {
   }
 
   return (
-    <section className="tarjeta ancho-completo">
-      <h2 style={{ marginBottom: 4 }}>Mis proyectos</h2>
-      <p className="ayuda" style={{ marginBottom: 16 }}>
-        Ocultar saca el proyecto de la vitrina pública, pero lo conservas aquí.
-      </p>
+    <section className="tarjeta ancho-completo" id="seccion-proyectos" tabIndex={-1} aria-labelledby="titulo-proyectos">
+      <h2 id="titulo-proyectos">Mis proyectos</h2>
+      <p className="ayuda">Ocultar saca el proyecto de la vitrina pública, pero lo conservas aquí.</p>
 
       {todos === null ? (
         <p className="ayuda">Cargando…</p>
@@ -338,27 +371,29 @@ function MisProyectos({ alAvisar, alFallar }) {
       ) : (
         <div className="grilla">
           {mios.map((p) => (
-            <div key={p.id} className="tarjeta">
+            <div key={p.id} className={p.visibilidad === 'PUBLICO' && !p.oculto ? 'tarjeta mio' : 'tarjeta mio apagado'}>
               <div className="etiquetas">
                 <span className={`insignia ${p.estado}`}>{ESTADOS[p.estado] ?? p.estado}</span>
                 {p.oculto ? (
-                  <span className="insignia moderado">Oculto por moderación</span>
+                  <span className="pildora moderado">Oculto por moderación</span>
                 ) : (
-                  <span className={p.visibilidad === 'PUBLICO' ? 'insignia propio' : 'insignia oculto'}>
-                    {p.visibilidad === 'PUBLICO' ? 'En la vitrina' : 'Fuera de la vitrina'}
+                  <span className={p.visibilidad === 'PUBLICO' ? 'pildora visible' : 'pildora'}>
+                    {p.visibilidad === 'PUBLICO' ? 'Visible' : 'Oculto'}
                   </span>
                 )}
               </div>
-              <h3 style={{ fontSize: 17 }}>{p.nombre}</h3>
+              <h3>{p.nombre}</h3>
               <p className="ayuda">{p.resumen}</p>
               {p.oculto && p.motivoOcultamiento && (
                 <p className="motivo-moderacion">Motivo: {p.motivoOcultamiento}</p>
               )}
               <div className="acciones">
-                <button className="secundario" onClick={() => setEditando(p)}>Editar</button>
-                <button className="secundario" onClick={() => cambiarVisibilidad(p)}>
-                  {p.visibilidad === 'PUBLICO' ? 'Ocultar' : 'Publicar'}
-                </button>
+                <button type="button" className="secundario" onClick={() => setEditando(p)}>Editar</button>
+                {!p.oculto && (
+                  <button type="button" className="secundario" onClick={() => cambiarVisibilidad(p)}>
+                    {p.visibilidad === 'PUBLICO' ? 'Ocultar de la vitrina' : 'Hacer visible'}
+                  </button>
+                )}
               </div>
             </div>
           ))}

@@ -1,31 +1,62 @@
 /* Estilos de DuocConecta.
-   Un solo archivo a propósito: la aplicación tiene tres pantallas y no justifica una librería
-   de componentes ni CSS por módulo. Los valores salen del prototipo aprobado. */
+   Un solo archivo a propósito: la aplicación tiene pocas pantallas y no justifica una librería de
+   componentes ni CSS por módulo. Los valores salen del prototipo aprobado (DuocConecta v2). */
 
 :root {
   /* Colores */
   --azul: #10233F;          /* marino: cabecera, panel de detalle, avisos */
   --azul-claro: #1B4DB1;    /* acción principal */
   --azul-oscuro: #16409A;   /* la misma acción, al pasar el mouse */
-  --amarillo: #FFC22E;      /* marca: logo, avatar, contador */
+  --azul-fondo: #F1F4FA;
+  --azul-borde: #B7CBEE;
+  --amarillo: #FFC22E;      /* marca: logo, avatar, contador, lo nuevo */
   --tinta: #1B2333;
   --tinta-media: #3C4657;
   --tinta-suave: #5A6579;
-  --tinta-apagada: #8B93A3;
+  --tinta-apagada: #6B7486; /* rótulos y fechas: 4.8:1 sobre blanco, pasa AA */
   --borde: #E3DFD6;         /* borde de tarjeta */
   --borde-campo: #D9D5CC;   /* borde de campo de formulario */
   --linea: #F0EDE6;         /* separador interno */
   --fondo: #FBFAF7;
   --fondo-hueso: #F4F1EA;
   --rojo: #D2461B;
+  --rojo-texto: #A3301B;
   --rojo-fondo: #FDECE7;
   --rojo-borde: #F3B9A4;
+  --verde: #1E6B45;
+  --verde-fondo: #E4F3EA;
+  --ocre: #8A5A00;
+  --ocre-fondo: #FFF3D6;
+  --crema: #FFF9E8;
+  --crema-borde: #F2DFA8;
+  --barra-texto: #8FA6C8;   /* texto apagado sobre el marino */
+  --barra-borde: #2E4468;
 
   /* Tipografías */
   --titulos: 'Bricolage Grotesque', system-ui, sans-serif;
   --cuerpo: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
 }
+
+/* --- Accesibilidad: las tres opciones del panel, aplicadas en <html> --- */
+/* Alto contraste: los textos secundarios pasan a marino y los bordes se oscurecen. */
+html[data-contraste="alto"] {
+  --tinta-media: #10233F;
+  --tinta-suave: #10233F;
+  --tinta-apagada: #10233F;
+  --borde: #5A6579;
+  --borde-campo: #5A6579;
+  --linea: #8B93A3;
+  --barra-texto: #FFFFFF;
+  --barra-borde: #8FA6C8;
+}
+html[data-contraste="alto"] :focus-visible { outline: 4px solid var(--amarillo); outline-offset: 3px; box-shadow: 0 0 0 7px var(--azul); }
+html[data-texto="1"] body { zoom: 1.12; }
+html[data-texto="2"] body { zoom: 1.25; }
+html[data-movimiento="reducido"] *, html[data-movimiento="reducido"] *::before, html[data-movimiento="reducido"] *::after {
+  animation: none !important; transition: none !important; scroll-behavior: auto !important;
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
 * { box-sizing: border-box; }
 
@@ -37,47 +68,165 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
+body.sin-scroll { overflow: hidden; }
 
 h1, h2, h3 { font-family: var(--titulos); letter-spacing: -.02em; }
 a { color: var(--azul-claro); }
+a:hover { color: var(--azul); }
 button, input, select, textarea { font-family: inherit; font-size: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
 :focus-visible { outline: 3px solid var(--amarillo); outline-offset: 2px; border-radius: 4px; }
+
+/* Texto que solo lee el lector de pantalla, y elementos auxiliares que no deben verse. */
+.solo-lector, .fuera-de-pantalla {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
 
 /* El rombo asimétrico es la firma de la marca: se repite en el logo y en el avatar. */
 .logo {
-  display: inline-block;
+  display: inline-block; flex: none;
   width: 26px; height: 26px;
   border-radius: 8px 2px 8px 2px;
   background: var(--amarillo);
 }
 
-@keyframes sube   { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-@keyframes aparece{ from { opacity: 0; } to { opacity: 1; } }
-@keyframes entra  { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+/* Candado: acompaña todo lo que habla de consentimiento y datos privados. */
+.candado {
+  display: inline-block; flex: none; position: relative;
+  width: 12px; height: 13px; margin: 5px 8px 0 0; vertical-align: -1px;
+  border: 2px solid var(--azul-claro); border-radius: 3px;
+}
+.candado::before {
+  content: ''; position: absolute; left: 0; top: -8px; width: 4px; height: 6px;
+  border: 2px solid var(--azul-claro); border-bottom: none; border-radius: 5px 5px 0 0;
+}
 
-/* --- Login: dos columnas, la de la izquierda es la presentación --- */
-.login { display: grid; grid-template-columns: 1.05fr .95fr; min-height: 100vh; }
-@media (max-width: 800px) { .login { grid-template-columns: 1fr; } }
+@keyframes sube    { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes aparece { from { opacity: 0; } to { opacity: 1; } }
+@keyframes entra   { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes llega   { from { opacity: 0; transform: translateY(-10px) scale(.99); } to { opacity: 1; transform: none; } }
+@keyframes vida    { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes late    { 0%, 100% { box-shadow: 0 0 0 0 rgba(27,77,177,.35); } 50% { box-shadow: 0 0 0 5px rgba(27,77,177,0); } }
+@keyframes brillo  { from { background-position: -320px 0; } to { background-position: 320px 0; } }
+@keyframes crece   { from { width: 0; } }
+
+/* Enlace para saltar la navegación con el teclado: invisible hasta que recibe el foco. */
+.saltar {
+  position: absolute; left: -9999px; top: 10px; z-index: 100;
+  background: var(--amarillo); color: var(--azul); padding: 10px 14px; border-radius: 8px;
+  font-weight: 600; font-size: 13.5px; text-decoration: none;
+}
+.saltar:focus { left: 12px; }
+
+/* ======================================================================= Login */
+/* El login es un <main> a pantalla completa: sin el ancho máximo ni el relleno del resto. */
+main.login { max-width: none; margin: 0; padding: 0; }
+.login {
+  display: grid; min-height: 100vh; background: var(--fondo);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+}
 
 .login-panel {
+  position: relative; overflow: hidden;
   background: var(--azul); color: var(--fondo);
-  padding: 56px; display: flex; flex-direction: column; justify-content: center;
+  padding: clamp(28px, 5vw, 56px); min-height: min(100vh, 760px);
+  display: flex; flex-direction: column; justify-content: space-between; gap: 40px;
 }
-.login-panel h1 {
-  font-family: var(--titulos); font-weight: 800;
-  font-size: clamp(30px, 3.6vw, 44px); line-height: 1.08; letter-spacing: -.02em; margin: 20px 0;
+.login-panel .circulo {
+  position: absolute; right: -40px; top: -40px; width: 260px; height: 260px;
+  border-radius: 50%; border: 1px solid #1E3558;
 }
-.login-panel p { color: #B9C6DC; max-width: 44ch; font-size: 17px; }
+.login-panel .circulo.grande { right: -120px; top: -120px; width: 420px; height: 420px; }
+.login-marca {
+  position: relative; display: flex; align-items: center; gap: 10px;
+  font-family: var(--titulos); font-weight: 800; font-size: 20px; letter-spacing: -.02em;
+}
+.login-marca .logo { width: 28px; height: 28px; border-radius: 9px 2px 9px 2px; }
+.login-titular { position: relative; max-width: 580px; }
+.login-titular h1 {
+  font-weight: 800; font-size: clamp(34px, 4.6vw, 60px); line-height: 1.02;
+  letter-spacing: -.035em; margin: 0 0 22px; text-wrap: balance;
+}
+.login-titular p { font-size: clamp(15px, 1.3vw, 18px); line-height: 1.6; color: #C3CFE2; margin: 0; max-width: 46ch; }
 
-.login-form { display: flex; flex-direction: column; justify-content: center; padding: 40px 48px; }
-.login-form h2 { margin: 0 0 6px; font-weight: 600; font-size: 26px; }
+/* La muestra: una tarjeta de proyecto y una solicitud aceptada, un poco giradas. */
+.login-muestra { position: relative; display: grid; gap: 10px; max-width: 400px; }
+.muestra-tarjeta {
+  background: #16304F; border: 1px solid #24426B; border-radius: 16px; padding: 16px 18px;
+  transform: rotate(-1.5deg); box-shadow: 0 18px 40px rgba(0,0,0,.25);
+}
+.muestra-fila { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.muestra-sede { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--barra-texto); }
+.muestra-titulo { margin: 0 0 10px; font-family: var(--titulos); font-weight: 600; font-size: 18px; letter-spacing: -.02em; }
+.muestra-aviso {
+  justify-self: end; display: flex; align-items: center; gap: 10px;
+  background: var(--fondo); color: var(--tinta); border-radius: 14px; padding: 11px 14px; font-size: 13px;
+  transform: rotate(1deg) translateY(-6px); box-shadow: 0 14px 30px rgba(0,0,0,.28);
+}
+.muestra-aviso strong { font-weight: 600; }
+.punto-verde { width: 9px; height: 9px; border-radius: 50%; background: #1E9E5A; flex: none; }
 
+.login-form {
+  display: flex; align-items: center; justify-content: center;
+  padding: clamp(32px, 5vw, 56px) clamp(20px, 4vw, 40px);
+}
+.login-caja { width: 100%; max-width: 400px; }
+.login-caja h2 { font-weight: 600; font-size: 28px; letter-spacing: -.025em; margin: 0 0 8px; }
+.login-explica { font-size: 14.5px; line-height: 1.55; margin: 0 0 24px; }
+.login-explica strong { color: var(--tinta); font-weight: 600; }
 /* La insignia viene en JPEG con fondo blanco. multiply lo hace desaparecer sobre el fondo claro
    y deja solo la marca, sin tener que editar el archivo. */
-.insignia-duoc { width: 150px; height: auto; margin-bottom: 22px; mix-blend-mode: multiply; }
+.insignia-duoc { width: 132px; height: auto; margin-bottom: 18px; mix-blend-mode: multiply; }
 
-/* --- Cabecera de la aplicación --- */
+.etiqueta-login { display: block; font-size: 12.5px; font-weight: 600; color: var(--tinta-media); margin-bottom: 7px; }
+.etiqueta-login .opcional { font-weight: 400; color: var(--tinta-apagada); }
+.campo-login { min-height: 50px; padding: 0 14px; border-radius: 12px; font-size: 15px; transition: border-color .15s; }
+.campo-login.malo { border: 2px solid var(--rojo); }
+#correo-login-ayuda { margin: 7px 0 16px; font-size: 12px; }
+
+.alerta-login {
+  display: flex; gap: 12px; padding: 14px; border-radius: 12px; margin-bottom: 16px;
+  background: var(--rojo-fondo); border: 1px solid var(--rojo-borde); color: #7A2A0E;
+  font-size: 13px; line-height: 1.5;
+}
+.alerta-login p { margin: 0; }
+.alerta-login .alerta-titulo { font-size: 13.5px; font-weight: 600; margin-bottom: 3px; }
+.alerta-icono {
+  width: 22px; height: 22px; border-radius: 50%; background: var(--rojo); color: #fff; flex: none;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px;
+}
+
+.botones-login { display: grid; gap: 10px; }
+.boton-login {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 54px; padding: 0 18px;
+  border-radius: 12px; font-size: 15px; font-weight: 600; text-align: left; transition: background .15s, border-color .15s;
+}
+.boton-login:disabled { opacity: .7; }
+.boton-login.microsoft { border: none; background: var(--azul-claro); color: #fff; box-shadow: 0 2px 0 var(--azul); }
+.boton-login.microsoft:hover:not(:disabled) { background: var(--azul-oscuro); }
+.boton-login.google { border: 1px solid var(--borde-campo); background: #fff; color: var(--tinta); }
+.boton-login.google:hover:not(:disabled) { border-color: var(--tinta-apagada); }
+.boton-login .recomendado {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; color: #C9D7F2;
+}
+.logo-microsoft { display: grid; grid-template-columns: 8px 8px; grid-template-rows: 8px 8px; gap: 2px; flex: none; }
+.logo-microsoft span:nth-child(1) { background: #F25022; }
+.logo-microsoft span:nth-child(2) { background: #7FBA00; }
+.logo-microsoft span:nth-child(3) { background: #00A4EF; }
+.logo-microsoft span:nth-child(4) { background: #FFB900; }
+.logo-google {
+  width: 18px; height: 18px; border-radius: 50%; flex: none;
+  border: 2.5px solid #4285F4; border-right-color: #EA4335; border-bottom-color: #FBBC05; border-left-color: #34A853;
+}
+
+.nota-privacidad {
+  display: flex; gap: 6px; align-items: flex-start; margin-top: 22px; padding-top: 18px;
+  border-top: 1px solid #ECE8DF;
+}
+.nota-privacidad p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--tinta-suave); }
+
+/* ======================================================================= Cabecera */
 .app header {
   position: sticky; top: 0; z-index: 40;
   background: var(--azul); color: var(--fondo);
@@ -87,13 +236,13 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
   display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px;
 }
 .marca { display: flex; align-items: center; gap: 9px; margin-right: 6px; }
-.marca strong { font-family: var(--titulos); font-weight: 800; font-size: 16px; }
+.marca strong { font-family: var(--titulos); font-weight: 800; font-size: 16px; letter-spacing: -.02em; }
 .marca .logo { width: 22px; height: 22px; border-radius: 7px 2px 7px 2px; }
 
 .app nav { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; flex: 1 1 auto; min-width: 0; }
 .app nav button {
-  padding: 8px 13px; border: none; border-radius: 9px; cursor: pointer;
-  font-size: 13.5px; background: transparent; color: #8FA6C8;
+  padding: 8px 13px; border: none; border-radius: 9px;
+  font-size: 13.5px; background: transparent; color: var(--barra-texto); white-space: nowrap;
 }
 .app nav button:hover { color: var(--fondo); }
 .app nav button.activo { background: rgba(255,255,255,.12); color: var(--fondo); font-weight: 600; }
@@ -105,88 +254,183 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 .pronto span {
   font-family: var(--mono); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase;
-  padding: 3px 6px; border: 1px solid #2E4468; border-radius: 5px;
+  padding: 3px 6px; border: 1px solid var(--barra-borde); border-radius: 5px;
 }
 
 .boton-barra {
-  background: transparent; border: 1px solid #2E4468; color: var(--fondo);
-  padding: 7px 11px; border-radius: 8px; cursor: pointer; font-size: 12.5px;
+  background: transparent; border: 1px solid var(--barra-borde); color: var(--fondo);
+  padding: 7px 11px; border-radius: 8px; font-size: 12.5px;
   display: flex; align-items: center; gap: 8px; white-space: nowrap;
 }
 .boton-barra:hover { border-color: #4A6494; }
+.icono-campana { width: 12px; height: 13px; border: 2px solid currentColor; border-radius: 6px 6px 2px 2px; flex: none; }
 
-/* Contador de solicitudes pendientes: amarillo si hay algo, apagado si no. */
+/* Contador: amarillo si hay algo, apagado si no. */
 .contador {
   min-width: 19px; height: 19px; padding: 0 5px; border-radius: 999px;
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 600; background: #2E4468; color: #8FA6C8;
+  font-size: 11px; font-weight: 600; background: var(--barra-borde); color: var(--barra-texto);
 }
 .contador.hay { background: var(--amarillo); color: var(--azul); }
 
 .avatar {
-  width: 34px; height: 34px; border-radius: 50%; border: 1px solid #2E4468;
-  background: var(--amarillo); color: var(--azul); font-weight: 600; font-size: 12.5px; cursor: pointer;
+  width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--barra-borde);
+  background: var(--amarillo); color: var(--azul); font-weight: 600; font-size: 12.5px;
 }
 
-/* Los dos menús que cuelgan de la cabecera. */
+/* Los menús que cuelgan de la cabecera. */
 .desplegable { position: relative; }
-/* Cuando la cabecera envuelve, los dos controles de cuenta se mueven juntos al borde derecho de
-   su fila en vez de separarse. En una sola fila no cambia nada: la navegación ya los empujaba. */
-.controles-cuenta { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.controles-cuenta { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-left: auto; }
 .panel-flotante {
-  position: absolute; right: 0; top: 46px; background: #fff; color: var(--tinta);
+  position: absolute; right: 0; top: calc(100% + 8px); background: #fff; color: var(--tinta);
   border: 1px solid var(--borde); border-radius: 14px;
   box-shadow: 0 20px 44px rgba(16,35,63,.22); padding: 14px; z-index: 50;
   animation: sube .18s ease;
 }
-.panel-flotante.ancho { width: min(340px, calc(100vw - 28px)); }
 .panel-flotante.angosto { width: 212px; padding: 8px; }
-.panel-flotante h4 { margin: 0 0 10px; font-size: 12px; font-weight: 600; color: var(--tinta-suave); font-family: var(--cuerpo); }
+.panel-flotante.accesibilidad { width: min(310px, calc(100vw - 24px)); padding: 16px; }
 .panel-flotante .opcion {
   width: 100%; text-align: left; padding: 9px 8px; border: none; background: transparent;
-  font-size: 13.5px; cursor: pointer; border-radius: 8px; color: var(--tinta);
+  font-size: 13.5px; border-radius: 8px; color: var(--tinta);
 }
 .panel-flotante .opcion:hover { background: var(--fondo-hueso); }
 .panel-flotante .opcion.salir { color: var(--rojo); }
 .panel-flotante .opcion.salir:hover { background: var(--rojo-fondo); }
+.correo-cuenta { margin: 6px 8px 10px; font-size: 12px; overflow-wrap: anywhere; }
+.nota-teclado { margin: 4px 0 0; padding-top: 12px; border-top: 1px solid var(--linea); font-size: 11.5px; }
 
-main { max-width: 1320px; margin: 0 auto; padding: 34px 24px 80px; }
+/* --- Centro de notificaciones --- */
+.panel-flotante.notificaciones {
+  width: min(420px, calc(100vw - 24px)); max-height: min(640px, calc(100vh - 90px));
+  overflow-y: auto; padding: 0; border-radius: 16px;
+}
+.notif-cabecera { position: sticky; top: 0; z-index: 1; background: #fff; padding: 16px 16px 12px; border-bottom: 1px solid var(--linea); }
+.notif-titulo { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.notif-titulo h2 { flex: 1; margin: 0; font-weight: 600; font-size: 18px; }
+.notif-pendientes { padding: 14px 16px 4px; }
+.notif-pendiente { border: 1px solid #D6E0F3; background: #F8FAFE; border-radius: 12px; padding: 12px; margin: 8px 0; }
+.notif-pendiente p { margin: 0; }
+.notif-pendiente .persona { font-size: 13.5px; font-weight: 600; }
+.notif-pendiente .detalle { font-size: 12px; color: var(--tinta-suave); }
+.notif-pendiente .acciones { margin-top: 10px; }
+.notif-lista { list-style: none; margin: 0; padding: 8px 8px 4px; }
+.notif { display: flex; gap: 12px; padding: 12px 10px; border-radius: 12px; margin-bottom: 4px; }
+.notif.no-leida { background: #F8FAFE; }
+.notif-barra { width: 4px; border-radius: 2px; flex: none; align-self: stretch; }
+.notif-cuerpo { flex: 1; min-width: 0; }
+.notif-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; font-size: 11.5px; color: var(--tinta-apagada); }
+.notif-tipo { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--tinta-suave); margin: 0; }
+.punto-sin-leer { margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: var(--azul-claro); }
+.notif-abrir { display: block; width: 100%; text-align: left; background: transparent; border: none; padding: 0; color: var(--tinta); }
+.notif-abrir .titulo { display: block; font-size: 13.5px; font-weight: 600; line-height: 1.35; margin-bottom: 3px; }
+.notif-abrir .texto { display: block; font-size: 12.5px; line-height: 1.45; color: var(--tinta-suave); }
+.notif-abrir:hover .titulo { color: var(--azul-claro); }
+.notif-vacio { margin: 14px 18px; }
+.notif-pie { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 16px 14px; border-top: 1px solid var(--linea); }
+.notif-pie p { flex: 1; min-width: 180px; margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--tinta-suave); }
+
+/* Colores por tipo de aviso: el mismo código en la barra, el icono del push y su barra de vida. */
+.solicitud  { --color-tipo: var(--azul-claro); }
+.aceptada   { --color-tipo: var(--verde); }
+.comentado  { --color-tipo: #E0A400; }
+.moderacion { --color-tipo: var(--rojo); }
+.sistema    { --color-tipo: #8B93A3; }
+.notif-barra, .emergente-icono, .emergente-vida { background: var(--color-tipo, #8B93A3); }
+
+/* --- Avisos emergentes (push) --- */
+.emergentes {
+  position: fixed; top: 78px; right: 16px; z-index: 80;
+  display: grid; gap: 10px; width: min(360px, calc(100vw - 32px)); pointer-events: none;
+}
+.emergente {
+  pointer-events: auto; position: relative; overflow: hidden; display: flex; gap: 12px;
+  background: #fff; color: var(--tinta); border: 1px solid var(--borde); border-radius: 14px;
+  box-shadow: 0 18px 40px rgba(16,35,63,.22); padding: 14px 12px 16px 14px; animation: entra .25s ease;
+}
+.emergente-icono { width: 34px; height: 34px; border-radius: 11px 3px 11px 3px; flex: none; }
+.emergente-cuerpo { flex: 1; min-width: 0; }
+.emergente-cuerpo p { margin: 0 0 3px; }
+.emergente-cuerpo .titulo { font-size: 13.5px; font-weight: 600; line-height: 1.35; }
+.emergente-cuerpo .texto { font-size: 12.5px; line-height: 1.45; color: var(--tinta-suave); }
+.emergente-cuerpo .principal { margin-top: 8px; }
+.cerrar-emergente {
+  flex: none; align-self: flex-start; width: 28px; height: 28px; border: none; border-radius: 7px;
+  background: transparent; color: var(--tinta-suave); font-size: 15px;
+}
+.cerrar-emergente:hover { background: var(--fondo-hueso); }
+.emergente-vida {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 3px; transform-origin: left;
+  animation: vida 6s linear forwards;
+}
+/* La barra dura lo mismo que el aviso, y se congela mientras el mouse o el foco están encima. */
+.emergente.vida-12 .emergente-vida { animation-duration: 12s; }
+.emergente.detenido .emergente-vida { animation-play-state: paused; }
+.ver-todos-emergentes {
+  pointer-events: auto; justify-self: end; border: 1px solid var(--borde); background: #fff;
+  color: var(--azul-claro); font-size: 12.5px; font-weight: 600; padding: 7px 12px; border-radius: 999px;
+  box-shadow: 0 8px 20px rgba(16,35,63,.16);
+}
+
+main { max-width: 1320px; margin: 0 auto; padding: 34px 24px 80px; outline: none; }
 /* El perfil respira más: con 1320px quedaban márgenes enormes en pantallas grandes. */
 main:has(.columnas) { max-width: 1400px; }
 
-/* --- Botones --- */
-button { font: inherit; cursor: pointer; }
-
+/* ======================================================================= Botones */
 .principal {
   padding: 13px 18px; border: none; border-radius: 10px;
   background: var(--azul-claro); color: #fff; font-size: 14.5px; font-weight: 600;
-  box-shadow: 0 2px 0 var(--azul);
+  box-shadow: 0 2px 0 var(--azul); white-space: nowrap;
 }
-.principal:hover { background: var(--azul-oscuro); }
-.principal:disabled { background: #EDE9E0; color: var(--tinta-apagada); box-shadow: none; cursor: not-allowed; }
+.principal:hover:not(:disabled) { background: var(--azul-oscuro); }
+.principal:disabled { background: #EDE9E0; color: var(--tinta-apagada); box-shadow: none; }
 
 .secundario {
   padding: 12px 16px; border: 1px solid var(--borde-campo); border-radius: 10px;
   background: #fff; color: var(--tinta); font-size: 14px;
 }
-.secundario:hover { border-color: var(--azul-claro); color: var(--azul-claro); }
+.secundario:hover:not(:disabled) { border-color: var(--azul-claro); color: var(--azul-claro); }
+
+.principal.chico, .secundario.chico { padding: 7px 12px; font-size: 12.5px; border-radius: 8px; }
+.principal.ancho, .secundario.ancho { width: 100%; }
+.secundario.ancho { margin-top: 8px; font-weight: 600; }
 
 .enlace {
   background: transparent; border: none; color: var(--azul-claro);
   font-size: 13px; font-weight: 600; padding: 4px;
 }
+.enlace:disabled { color: var(--tinta-apagada); }
 
-/* --- Encabezado de sección --- */
+.peligro { color: #A32020; border-color: #E2BFBF; }
+.peligro:hover:not(:disabled) { background: #FDF3F3; color: #A32020; border-color: #E2BFBF; }
+.principal.peligro-lleno { background: #B42318; box-shadow: 0 2px 0 #7A1A12; }
+.principal.peligro-lleno:hover:not(:disabled) { background: #912018; }
+
+.crece { flex: 1; min-width: 0; }
+
+/* ======================================================================= Página */
 .titulo-pagina { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-end; justify-content: space-between; margin-bottom: 26px; }
 .titulo-pagina h1 { font-weight: 800; font-size: clamp(26px, 5vw, 38px); letter-spacing: -.03em; margin: 0 0 6px; }
 .titulo-pagina p { margin: 0; font-size: 14.5px; color: var(--tinta-suave); }
+.acciones-pagina { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+/* Botón del feed en vivo: el punto late mientras la vitrina se actualiza sola. */
+.boton-vivo {
+  display: inline-flex; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 10px;
+  font-size: 13px; font-weight: 500; background: #fff; border: 1px solid var(--borde-campo); color: var(--tinta-apagada);
+}
+.boton-vivo.activo { border-color: var(--azul-borde); color: var(--azul-claro); }
+.punto-vivo { width: 8px; height: 8px; border-radius: 50%; background: var(--borde-campo); }
+.boton-vivo.activo .punto-vivo { background: var(--azul-claro); animation: late 1.8s ease-in-out infinite; }
 
 /* --- Tarjetas --- */
 .tarjeta {
   background: #fff; border: 1px solid var(--borde); border-radius: 16px; padding: 22px;
 }
 .tarjeta h2 { margin: 0 0 16px; font-weight: 600; font-size: 19px; }
+.tarjeta h2 + .ayuda { margin: -10px 0 16px; }
 .tarjeta h3 { margin: 0 0 8px; font-weight: 600; font-size: 20px; line-height: 1.15; }
+.tarjeta.bloque { padding: 16px; border-radius: 14px; }
+.titulo-seguido { margin-top: 26px !important; }
 
 /* min(322px, 100%): con 322px a secas, por debajo de ~370px la columna excedía la pantalla. */
 .grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(322px, 100%), 1fr)); gap: 18px; }
@@ -201,20 +445,37 @@ button { font: inherit; cursor: pointer; }
   border: 1px dashed var(--borde-campo); border-radius: 16px;
 }
 .vacio .logo { width: 44px; height: 44px; border-radius: 14px 3px 14px 3px; margin-bottom: 16px; }
+.vacio h3 { font-weight: 600; font-size: 21px; margin: 0 0 8px; }
 
 .ayuda { font-size: 13px; color: var(--tinta-suave); }
+.sin-margen { margin: 0; }
 .cargando { padding: 60px; text-align: center; color: var(--tinta-suave); }
 
 .aviso {
-  background: #FFF9E8; border: 1px solid #F2DFA8; border-radius: 12px;
+  background: var(--crema); border: 1px solid var(--crema-borde); border-radius: 12px;
   padding: 12px 16px; color: #7A5A12; font-size: 13px; margin-bottom: 18px;
 }
+.aviso.escondidos { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.aviso.escondidos p { margin: 0; flex: 1; }
+.aviso.escondidos .enlace { color: var(--ocre); }
+
 .error {
   display: flex; gap: 10px; padding: 13px 14px; border-radius: 10px;
   background: var(--rojo-fondo); border: 1px solid var(--rojo-borde);
   color: #7A2A0E; font-size: 13px; margin-bottom: 16px;
 }
 .error::before { content: ''; width: 6px; border-radius: 3px; background: var(--rojo); flex: none; }
+
+/* --- Esqueleto de carga --- */
+.esqueleto { display: grid; gap: 12px; padding: 18px; }
+.esqueleto .linea {
+  display: block; height: 12px; border-radius: 6px;
+  background: linear-gradient(90deg, var(--linea) 0, #F8F6F1 160px, var(--linea) 320px);
+  background-size: 640px 100%; animation: brillo 1.4s linear infinite;
+}
+.esqueleto .linea.corta { width: 30%; }
+.esqueleto .linea.media { width: 60%; }
+.esqueleto .linea.titulo { height: 20px; width: 75%; }
 
 /* --- Etiquetas de estado --- */
 .etiquetas { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 11px; }
@@ -223,61 +484,98 @@ button { font: inherit; cursor: pointer; }
   display: inline-block; font-size: 11.5px; font-weight: 600;
   padding: 5px 10px; border-radius: 7px; background: var(--fondo-hueso); color: var(--tinta-suave);
 }
-.insignia.EN_DESARROLLO  { background: #FFF3D6; color: #8A5A00; }
-.insignia.TERMINADO      { background: #E4F3EA; color: #1E6B45; }
+.insignia.EN_DESARROLLO  { background: var(--ocre-fondo); color: var(--ocre); }
+.insignia.TERMINADO      { background: var(--verde-fondo); color: var(--verde); }
 .insignia.BUSCANDO_EQUIPO{ background: #E8EFFA; color: var(--azul-claro); }
-.insignia.PENDIENTE      { background: #FFF3D6; color: #8A5A00; }
-.insignia.ACEPTADA       { background: #E4F3EA; color: #1E6B45; }
-.insignia.RECHAZADA      { background: var(--linea); color: var(--tinta-apagada); }
-.insignia.oculto         { background: #FFF9E8; color: #8A5A00; border: 1px solid #F2DFA8; }
+.insignia.oculto         { background: var(--crema); color: var(--ocre); border: 1px solid var(--crema-borde); }
 .insignia.propio         { background: #E8EFFA; color: var(--azul-claro); }
-.insignia.moderado       { background: #FDECE7; color: #A3301B; border: 1px solid #F2C4B8; }
-.insignia.no-leido       { background: #E8EFFA; color: var(--azul-claro); }
+.insignia.moderado       { background: var(--rojo-fondo); color: var(--rojo-texto); border: 1px solid #F2C4B8; }
 
-/* Bandeja de avisos (EP2): cada aviso nace de un evento procesado por ms-notificaciones. */
-.aviso-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-bottom: 1px solid var(--linea); }
-.aviso-item:last-child { border-bottom: 0; }
-.aviso-item.leido { opacity: .62; }
-.aviso-item .contenido { flex: 1; min-width: 0; }
-.aviso-item .titulo { font-weight: 600; font-size: 14px; margin: 0 0 2px; }
-.aviso-item .motivo { font-size: 13px; margin: 2px 0 0; color: var(--tinta); }
-.motivo-moderacion { font-size: 13px; color: #A3301B; margin: 4px 0 0; }
+/* "Nuevo": lo que llegó con el feed en vivo o se acaba de escribir. */
+.insignia-nuevo {
+  display: inline-block; font-family: var(--mono); font-size: 9.5px; font-weight: 500;
+  letter-spacing: .08em; text-transform: uppercase; padding: 4px 7px; border-radius: 6px;
+  background: var(--amarillo); color: var(--azul);
+}
+
+/* Píldoras en mayúscula: estado de una solicitud y visibilidad de un proyecto propio. */
+.pildora {
+  display: inline-block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+  padding: 4px 9px; border-radius: 6px; background: #EDE9E0; color: var(--tinta-apagada);
+}
+.pildora.PENDIENTE { background: var(--ocre-fondo); color: var(--ocre); }
+.pildora.ACEPTADA, .pildora.visible { background: var(--verde-fondo); color: var(--verde); }
+.pildora.RECHAZADA { background: var(--linea); color: var(--tinta-apagada); }
+.pildora.moderado { background: var(--rojo-fondo); color: var(--rojo-texto); }
+
+.motivo-moderacion { font-size: 13px; color: var(--rojo-texto); margin: 4px 0 0; }
 
 /* Herramientas: la marca lateral las distingue de una etiqueta de estado. */
 .chip {
   font-family: var(--mono); font-size: 11px; padding: 4px 9px 4px 7px;
-  background: #F1F4FA; color: var(--azul-claro);
+  background: var(--azul-fondo); color: var(--azul-claro);
   border-left: 3px solid var(--azul-claro); border-radius: 3px 7px 7px 3px;
 }
+.chip.oscuro { background: #1E3B63; color: #B7CBEE; border-left-color: var(--amarillo); font-size: 10.5px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 
-/* --- Filtros de la vitrina: una sola fila, para que no se coma la pantalla --- */
+/* Chips de filtro: redondos, se prenden en marino. */
+.chip-filtro {
+  font-size: 12.5px; padding: 7px 12px; border-radius: 999px; transition: .15s;
+  border: 1px solid var(--borde); background: #fff; color: var(--tinta-suave);
+}
+.chip-filtro:hover { border-color: var(--tinta-apagada); color: var(--tinta); }
+.chip-filtro.activo { border-color: var(--azul); background: var(--azul); color: var(--fondo); font-weight: 600; }
+/* Cuántos proyectos deja el chip. Uno que deja cero se atenúa, pero se puede tocar igual. */
+.chip-filtro .cantidad { margin-left: 6px; font-size: 11px; font-family: var(--mono); color: var(--tinta-apagada); }
+.chip-filtro.activo .cantidad { color: var(--barra-texto); }
+.chip-filtro.sin-resultados { color: var(--tinta-apagada); border-style: dashed; }
+
+/* --- Filtros de la vitrina --- */
 .filtros {
   background: #fff; border: 1px solid var(--borde); border-radius: 16px;
-  padding: 14px 16px; margin-bottom: 24px;
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 18px 20px; margin-bottom: 24px;
 }
-.filtros input, .filtros select {
-  padding: 10px 12px; border: 1px solid var(--borde-campo); border-radius: 9px; background: #fff;
+.filtros .buscador { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.filtros .buscador input { flex: 1; max-width: 460px; min-width: 200px; }
+.grupo-chips { display: flex; gap: 12px; align-items: baseline; padding: 7px 0; flex-wrap: wrap; }
+.grupo-chips > .rotulo, .buscador > .rotulo { width: 104px; flex: none; margin: 0; }
+.grupo-chips .chips { gap: 7px; flex: 1; }
+.filtros-pie {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  border-top: 1px solid var(--linea); margin-top: 12px; padding-top: 13px;
 }
-/* Los desplegables llevan tope: un <select> toma el ancho de su opción más larga, y una carrera
-   de 60 caracteres rompería la fila. La lista abierta igual muestra el nombre completo. */
-.filtros .buscador { flex: 1 1 220px; min-width: 160px; }
-.filtros select {
-  flex: 0 1 auto; font-size: 13.5px; color: var(--tinta-media);
-  text-overflow: ellipsis; padding-right: 8px;
+.filtros-pie p { margin: 0; font-size: 13.5px; color: var(--tinta-suave); }
+.filtros-pie strong { color: var(--tinta); font-weight: 600; }
+/* Lo elegido, a la vista: cada filtro activo se quita con su ×. */
+.filtros-activos { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; list-style: none; margin: 0; padding: 0; flex: 1; }
+.filtro-activo {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+  padding: 5px 8px 5px 11px; border-radius: 999px; border: 1px solid var(--azul-borde);
+  background: var(--azul-fondo); color: var(--azul-claro);
 }
-.filtros .ancho-medio  { max-width: 230px; }
-.filtros .ancho-chico  { max-width: 170px; }
-.filtros .ancho-minimo { max-width: 150px; }
-.filtros .resumen { margin-left: auto; font-size: 13.5px; color: var(--tinta-suave); white-space: nowrap; }
-.filtros .resumen strong { color: var(--tinta); font-weight: 600; }
+.filtro-activo span { font-size: 14px; line-height: 1; }
+.filtro-activo:hover { border-color: var(--azul-claro); }
+.filtros-pie .orden { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--tinta-suave); margin-left: auto; }
+.filtros-pie .orden select { width: auto; padding: 6px 10px; font-size: 13px; }
+
+/* La barra de filtros de la administración sigue siendo de desplegables. */
+.filtros-admin { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.filtros-admin select { width: auto; }
+.filtros-admin .resumen { margin-left: auto; font-size: 13.5px; color: var(--tinta-suave); }
 
 /* --- Tarjeta de proyecto --- */
-.proyecto { cursor: pointer; transition: transform .15s, box-shadow .15s; box-shadow: 0 1px 2px rgba(16,35,63,.05); padding: 18px; }
+.proyecto {
+  cursor: pointer; padding: 18px; display: flex; flex-direction: column;
+  transition: transform .15s, box-shadow .15s; box-shadow: 0 1px 2px rgba(16,35,63,.05);
+}
 .proyecto:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(16,35,63,.1); }
+.proyecto.nuevo { border-color: var(--amarillo); box-shadow: 0 6px 22px rgba(255,194,46,.28); animation: llega .45s ease; }
 .proyecto .fecha { margin-left: auto; font-size: 11.5px; color: var(--tinta-apagada); }
-.proyecto p { margin: 0 0 12px; font-size: 13.5px; line-height: 1.55; color: var(--tinta-suave); }
+.proyecto > p { margin: 0 0 12px; font-size: 13.5px; line-height: 1.55; color: var(--tinta-suave); }
+.proyecto .chips { margin-bottom: 2px; }
+.proyecto .acciones { margin-top: auto; padding-top: 12px; }
+.proyecto .esconder { flex: none; width: 38px; padding: 10px 0; color: var(--tinta-apagada); }
 
 .pie-autor { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--linea); padding-top: 12px; margin-top: 14px; }
 .iniciales {
@@ -296,19 +594,18 @@ button { font: inherit; cursor: pointer; }
 
 .acciones { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .acciones .principal, .acciones .secundario { padding: 10px 12px; font-size: 12.5px; }
-.acciones .crece { flex: 1; }
-.peligro { color: #A32020; border-color: #E2BFBF; }
-.peligro:hover { background: #FDF3F3; color: #A32020; border-color: #E2BFBF; }
+.acciones.centradas { justify-content: center; margin-top: 20px; }
+.acciones.centradas .principal, .acciones.centradas .secundario { padding: 12px 16px; font-size: 14px; }
 
-/* --- Panel lateral de detalle --- */
+/* ======================================================================= Panel lateral */
 .telon { position: fixed; inset: 0; background: rgba(16,35,63,.42); z-index: 60; animation: aparece .16s ease; }
 .drawer {
   position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100%);
-  background: var(--fondo); z-index: 61; overflow-y: auto;
+  background: var(--fondo); z-index: 61; overflow-y: auto; outline: none;
   box-shadow: -18px 0 50px rgba(16,35,63,.24); animation: entra .2s ease;
 }
 .drawer-cabecera {
-  position: sticky; top: 0; background: var(--azul); color: var(--fondo);
+  position: sticky; top: 0; z-index: 1; background: var(--azul); color: var(--fondo);
   padding: 18px 24px; display: flex; align-items: flex-start; gap: 14px;
 }
 .drawer-cabecera h2 { font-weight: 800; font-size: 26px; line-height: 1.1; letter-spacing: -.03em; margin: 10px 0 4px; }
@@ -317,48 +614,56 @@ button { font: inherit; cursor: pointer; }
 .drawer-cuerpo > p { margin: 0; font-size: 14.5px; line-height: 1.65; color: var(--tinta-media); }
 
 .cerrar {
-  background: transparent; border: 1px solid #2E4468; color: var(--fondo);
+  background: transparent; border: 1px solid var(--barra-borde); color: var(--fondo);
   width: 32px; height: 32px; border-radius: 8px; font-size: 15px; flex: none;
 }
 
-/* Bloque que explica el consentimiento. Aparece en el detalle y en el perfil. */
-.consentimiento { background: #fff; border: 1px solid var(--borde); border-radius: 14px; padding: 16px; }
-.consentimiento h4 { margin: 0 0 8px; font-size: 12.5px; font-weight: 600; color: var(--azul-claro); font-family: var(--cuerpo); }
-.consentimiento p { margin: 0 0 14px; font-size: 12.5px; line-height: 1.55; color: var(--tinta-suave); }
+/* Bloque que explica el consentimiento. Aparece en el detalle, en las ventanas y en el perfil. */
+.consentimiento { background: #fff; border: 1px solid var(--borde); border-radius: 14px; padding: 16px; display: grid; gap: 12px; }
+.consentimiento h4 { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--azul-claro); font-family: var(--cuerpo); display: flex; align-items: flex-start; }
+.consentimiento p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--tinta-suave); }
+.consentimiento .acciones { margin-top: 0; }
+.consentimiento .secundario.ancho { margin-top: -4px; }
 
 .rotulo {
-  font-size: 11.5px; font-weight: 600; text-transform: uppercase;
+  margin: 0 0 10px; font-size: 11.5px; font-weight: 600; text-transform: uppercase;
   letter-spacing: .07em; color: var(--tinta-apagada);
 }
 
 .adjunto { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--linea); font-size: 13px; }
 .adjunto .hoja { width: 26px; height: 30px; border: 1px solid var(--borde-campo); border-radius: 4px; background: #F8F6F1; flex: none; }
 
-.comentario { background: #fff; border: 1px solid var(--borde); border-radius: 12px; padding: 13px 14px; }
+.comentario { background: #fff; border: 1px solid #EDE9E0; border-radius: 12px; padding: 13px 14px; }
+.comentario.nuevo { border-color: var(--amarillo); animation: llega .35s ease; }
 .comentario .quien { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
 .comentario .quien strong { font-size: 13px; }
-.comentario .quien span { font-size: 11.5px; color: #A8A398; }
+.comentario .quien span:not(.insignia-nuevo) { font-size: 11.5px; color: var(--tinta-apagada); }
 .comentario p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--tinta-media); }
 
-.escribir { display: flex; gap: 9px; }
+.escribir { display: flex; gap: 9px; margin-top: 14px; }
 .escribir input { flex: 1; padding: 12px; border: 1px solid var(--borde-campo); border-radius: 10px; background: #fff; }
-.escribir button { padding: 12px 16px; border: none; border-radius: 10px; background: var(--azul); color: #fff; font-size: 13.5px; font-weight: 600; white-space: nowrap; }
+.escribir button {
+  padding: 12px 16px; border: none; border-radius: 10px; background: var(--azul); color: #fff;
+  font-size: 13.5px; font-weight: 600; white-space: nowrap;
+}
+.escribir button:disabled { background: #EDE9E0; color: var(--tinta-apagada); }
 
-/* --- Ventana de publicar / editar --- */
+/* ======================================================================= Ventanas */
 .modal-fondo { position: fixed; inset: 0; background: rgba(16,35,63,.42); z-index: 70; animation: aparece .16s ease; }
 .modal-caja {
   position: fixed; inset: 0; z-index: 71; display: flex; align-items: flex-start; justify-content: center;
   padding: 38px 20px; overflow-y: auto; pointer-events: none;
 }
 .modal {
-  width: min(620px, 100%); background: var(--fondo); border-radius: 18px;
+  width: min(620px, 100%); background: var(--fondo); border-radius: 18px; outline: none;
   box-shadow: 0 30px 70px rgba(16,35,63,.3); pointer-events: auto; animation: sube .2s ease; overflow: hidden;
 }
+.modal.ancha { width: min(880px, 100%); }
 .modal-cabecera { background: #fff; padding: 20px 24px; border-bottom: 1px solid var(--borde); display: flex; align-items: center; gap: 14px; }
-.modal-cabecera h2 { margin: 0; flex: 1; font-weight: 600; font-size: 22px; }
+.modal-cabecera h2 { margin: 0; flex: 1; min-width: 0; font-weight: 600; font-size: 22px; overflow-wrap: anywhere; }
 .modal-cabecera .cerrar { border-color: var(--borde); color: var(--tinta); }
-.modal form { padding: 22px 24px 26px; display: grid; gap: 16px; }
-.cuerpo-modal { padding: 22px 24px 26px; display: grid; gap: 16px; }
+.modal form, .cuerpo-modal { padding: 22px 24px 26px; display: grid; gap: 16px; }
+.texto-confirmar { margin: 0; font-size: 14px; line-height: 1.6; color: var(--tinta-media); }
 
 /* --- Formularios --- */
 label { display: grid; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--tinta-apagada); }
@@ -369,11 +674,107 @@ input, select, textarea {
 textarea { resize: vertical; }
 input:disabled { background: var(--fondo-hueso); color: var(--tinta-apagada); border-color: #EDE9E0; }
 input.malo, textarea.malo { border-color: var(--rojo); }
-.mensaje-campo { font-size: 12.5px; color: var(--rojo); font-weight: 400; }
+label .ayuda { font-weight: 400; }
+.mensaje-campo { font-size: 12.5px; color: var(--rojo-texto); font-weight: 400; }
+.contador-campo { justify-self: end; font-size: 11px; font-weight: 400; color: var(--tinta-apagada); font-family: var(--mono); }
 .dos-columnas { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 560px) { .dos-columnas { grid-template-columns: 1fr; } }
 
-/* --- Perfil --- */
+/* Destinatario en las ventanas de colaboración. */
+.destinatario { display: flex; align-items: center; gap: 11px; }
+.destinatario .iniciales { width: 40px; height: 40px; font-size: 13px; }
+.destinatario strong { display: block; font-size: 15px; }
+.destinatario span { display: block; font-size: 12.5px; color: var(--tinta-apagada); }
+
+/* Casilla de consentimiento dentro de las ventanas. */
+.casilla { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--tinta-media); cursor: pointer; }
+.casilla input { width: 15px; height: 15px; margin: 0; cursor: pointer; accent-color: var(--azul-claro); }
+
+/* Campo de archivos adjuntos del formulario de proyecto. */
+.adjuntos-campo { display: grid; gap: 8px; }
+.adjuntos-campo .etiqueta-campo { font-size: 13px; font-weight: 500; color: var(--tinta-media); }
+.adjuntos-campo .adjunto { display: flex; align-items: center; gap: 9px; font-size: 13px; }
+.adjuntos-campo .adjunto .cerrar { width: 24px; height: 24px; padding: 0; font-size: 15px; line-height: 1; border-color: var(--borde); color: var(--tinta); }
+.adjuntos-campo > button { justify-self: start; }
+
+/* --- Compartir --- */
+.compartir-canales { display: flex; gap: 8px; padding: 14px 22px 0; flex-wrap: wrap; }
+.canal {
+  display: flex; align-items: center; gap: 9px; padding: 7px 14px 7px 7px; border-radius: 12px;
+  font-size: 13.5px; font-weight: 600; transition: .15s;
+  background: transparent; border: 1.5px solid var(--borde); color: var(--tinta-suave);
+}
+.canal.activo { background: #fff; border-color: var(--azul); color: var(--azul); box-shadow: 0 2px 6px rgba(16,35,63,.1); }
+.canal-icono {
+  width: 26px; height: 26px; border-radius: 8px; flex: none; display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 10.5px; font-weight: 700;
+}
+.canal-icono.instagram { background: linear-gradient(135deg, #F58529, #DD2A7B 55%, #8134AF); }
+.canal-icono.whatsapp { background: #25D366; }
+.canal-icono.github { background: #1F2328; }
+.compartir-panel {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 24px; padding: 20px 22px 24px; align-items: start;
+}
+.compartir-vista { display: flex; justify-content: center; padding: 22px 16px; border-radius: 16px; background: #ECE8DF; }
+.compartir-datos { display: flex; flex-direction: column; gap: 14px; }
+.compartir-datos h3 { margin: 0 0 4px; font-size: 15px; font-weight: 600; font-family: var(--cuerpo); letter-spacing: 0; }
+.compartir-datos .ayuda { margin: 0; }
+.texto-compartir { font-family: var(--mono); font-size: 12px; line-height: 1.55; font-weight: 400; color: var(--tinta); }
+.boton-red {
+  display: flex; align-items: center; justify-content: center; min-height: 48px; border-radius: 11px;
+  color: #fff; font-size: 14.5px; font-weight: 600; text-decoration: none; box-shadow: 0 2px 0 rgba(0,0,0,.18);
+}
+.boton-red:hover { color: #fff; filter: brightness(1.08); }
+.boton-red.instagram { background: #C13584; }
+.boton-red.whatsapp { background: #128C4A; }
+.boton-red.github { background: #1F2328; }
+.compartir-enlace { display: flex; align-items: center; gap: 10px; padding-top: 12px; border-top: 1px solid var(--borde); }
+.compartir-enlace span { flex: 1; min-width: 0; font-family: var(--mono); font-size: 11.5px; color: var(--tinta-suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.vista-historia {
+  position: relative; width: 236px; height: 420px; border-radius: 22px; overflow: hidden;
+  background: var(--azul); color: var(--fondo); box-shadow: 0 18px 40px rgba(16,35,63,.3);
+  display: flex; flex-direction: column; padding: 16px 16px 18px;
+}
+.historia-barras { display: flex; gap: 3px; margin-bottom: 12px; }
+.historia-barras span { flex: 1; height: 2px; border-radius: 2px; background: rgba(251,250,247,.35); }
+.historia-barras span:first-child { background: var(--fondo); }
+.historia-autor { display: flex; align-items: center; gap: 7px; margin-bottom: auto; font-size: 11px; font-weight: 600; }
+.historia-avatar {
+  width: 24px; height: 24px; border-radius: 50%; background: var(--amarillo); color: var(--azul);
+  font-size: 9.5px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
+.historia-cuerpo .insignia-nuevo { margin-bottom: 10px; }
+.historia-titulo { margin: 0 0 8px; font-family: var(--titulos); font-weight: 800; font-size: 25px; line-height: 1.04; letter-spacing: -.03em; overflow-wrap: anywhere; }
+.historia-autor-texto { margin: 0 0 12px; font-size: 11.5px; line-height: 1.4; color: #C3CFE2; }
+.historia-etiqueta { margin: 14px 0 0; font-size: 11px; font-weight: 600; color: var(--amarillo); }
+
+.vista-whatsapp { width: 100%; max-width: 330px; border-radius: 18px; overflow: hidden; box-shadow: 0 18px 40px rgba(16,35,63,.22); background: #EFE7DC; }
+.whatsapp-cabecera { padding: 12px 14px; background: #075E54; color: #fff; font-size: 13px; font-weight: 600; }
+.whatsapp-burbuja {
+  margin: 16px 12px 18px auto; max-width: 88%; background: #D9FDD3; border-radius: 10px 2px 10px 10px;
+  padding: 4px 4px 8px; box-shadow: 0 1px 1px rgba(0,0,0,.08); font-size: 12.5px; line-height: 1.45; color: #111B21;
+}
+.whatsapp-burbuja > p { margin: 0 6px; overflow-wrap: anywhere; }
+.whatsapp-tarjeta { display: flex; gap: 9px; align-items: center; border-radius: 7px; background: #C8EEC1; margin-bottom: 6px; padding: 8px; }
+.whatsapp-tarjeta p { margin: 0; font-size: 11px; color: #3B4A54; }
+.whatsapp-tarjeta .titulo { font-size: 12px; font-weight: 600; color: #111B21; }
+.whatsapp-enlace { color: #027EB5; }
+
+.vista-github {
+  width: 100%; max-width: 360px; border-radius: 12px; overflow: hidden; border: 1px solid #D0D7DE; background: #fff;
+  box-shadow: 0 18px 40px rgba(16,35,63,.16); font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+}
+.github-archivo { padding: 10px 14px; background: #F6F8FA; border-bottom: 1px solid #D0D7DE; font-size: 12.5px; font-weight: 600; color: #1F2328; }
+.github-cuerpo { padding: 16px 18px 18px; }
+.github-cuerpo .titulo { margin: 0 0 10px; font-size: 20px; font-weight: 600; color: #1F2328; padding-bottom: 7px; border-bottom: 1px solid #D8DEE4; }
+.github-cuerpo p { margin: 0; font-size: 13px; line-height: 1.5; color: #59636E; }
+.github-insignia { display: inline-flex; margin-bottom: 12px; border-radius: 3px; overflow: hidden; font-family: Verdana, sans-serif; font-size: 10.5px; line-height: 20px; color: #fff; }
+.github-insignia span:first-child { background: #555; padding: 0 6px; }
+.github-insignia span:last-child { background: var(--azul-claro); padding: 0 6px; }
+
+/* ======================================================================= Perfil */
 .cabecera-perfil { display: flex; align-items: center; gap: 16px; margin-bottom: 28px; }
 .cabecera-perfil .marca-grande {
   width: 60px; height: 60px; border-radius: 20px 5px 20px 5px; background: var(--amarillo); color: var(--azul);
@@ -385,22 +786,56 @@ input.malo, textarea.malo { border-color: var(--rojo); }
 
 /* Dos columnas explícitas y no auto-fit: con minmax(380px,1fr) entraban tres y arriba solo hay
    dos tarjetas, así que la tercera quedaba vacía. minmax(0,1fr) porque 1fr no deja encoger. */
-.columnas { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: stretch; }
+.columnas { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 @media (max-width: 900px) { .columnas { grid-template-columns: 1fr; } }
+.columnas form { display: grid; gap: 13px; }
 .ancho-completo { grid-column: 1 / -1; }
 /* Dentro de una tarjeta hay menos ancho: con 322px entraban dos columnas donde caben tres. */
-.ancho-completo .grilla { grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 14px; }
+.ancho-completo .grilla { grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 14px; }
+[id^="seccion-"] { scroll-margin-top: 90px; outline: none; }
 
-/* Pestañas de enviadas / recibidas */
-.pestanas { display: flex; gap: 6px; background: var(--fondo-hueso); padding: 4px; border-radius: 10px; margin-bottom: 16px; max-width: 340px; }
-.pestanas button { flex: 1; padding: 9px; border: none; border-radius: 8px; background: transparent; color: var(--tinta-suave); font-size: 13.5px; }
-.pestanas button.activo { background: #fff; color: var(--tinta); font-weight: 600; box-shadow: 0 1px 2px rgba(16,35,63,.08); }
+.tarjeta.mio { padding: 16px; border-radius: 14px; }
+.tarjeta.mio.apagado { background: #F7F5F0; }
+.tarjeta.mio h3 { font-size: 17px; margin: 0 0 6px; }
+.tarjeta.mio .ayuda { margin: 0 0 4px; }
+
+/* Control segmentado: Recibidas/Enviadas y el tamaño del texto. */
+.segmentos { display: flex; gap: 4px; background: var(--fondo-hueso); padding: 4px; border-radius: 10px; margin-bottom: 16px; }
+.segmentos button {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 8px 10px; border: none; border-radius: 8px; background: transparent;
+  color: var(--tinta-suave); font-size: 12.5px; font-weight: 600; white-space: nowrap;
+}
+.segmentos button.activo { background: #fff; color: var(--tinta); box-shadow: 0 1px 2px rgba(16,35,63,.12); }
+.accesibilidad .segmentos { margin-bottom: 4px; }
 
 .fila-solicitud { border: 1px solid #EDE9E0; border-radius: 12px; padding: 14px; }
 .fila-solicitud p { margin: 0; }
+.fila-solicitud .etiquetas { margin-bottom: 8px; }
+.fila-solicitud .fecha { margin-left: auto; font-size: 11.5px; color: var(--tinta-apagada); }
 .fila-solicitud .persona { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
 .fila-solicitud .detalle { font-size: 12.5px; color: var(--tinta-suave); }
 .fila-solicitud .cita { margin-top: 8px; border-left: 3px solid var(--linea); padding-left: 12px; color: var(--tinta-suave); font-style: italic; font-size: 13px; }
+.enlace.peligro { color: #A32020; padding-left: 0; }
+
+/* Avance de una solicitud: dos puntos unidos por una línea, como en el prototipo. */
+.pasos-solicitud { margin-top: 10px; }
+.pasos-solicitud ol { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 0; list-style: none; margin: 0; padding: 0; }
+.pasos-solicitud li { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--tinta-apagada); }
+.pasos-solicitud li::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--borde-campo); flex: none; }
+.pasos-solicitud li:not(:last-child)::after { content: ''; width: 26px; height: 2px; margin: 0 8px; background: var(--borde-campo); }
+.pasos-solicitud li.hecho { color: var(--verde); font-weight: 600; }
+.pasos-solicitud li.hecho::before { background: var(--verde); }
+.pasos-solicitud li.actual { color: var(--ocre); font-weight: 600; }
+.pasos-solicitud li.actual::before { background: var(--amarillo); box-shadow: 0 0 0 3px var(--ocre-fondo); }
+.pasos-solicitud li.RECHAZADA, .pasos-solicitud li.RETIRADA { color: var(--tinta-suave); }
+.pasos-solicitud li.RECHAZADA::before, .pasos-solicitud li.RETIRADA::before { background: var(--tinta-apagada); }
+.notif-pendiente .pasos-solicitud { margin: 6px 0 8px; }
+.pildora.RETIRADA { background: var(--linea); color: var(--tinta-apagada); }
+
+/* Sobre qué proyecto es una solicitud o una colaboración. */
+.sobre-proyecto { font-size: 12px; color: var(--tinta-apagada); margin: 2px 0 0; }
+.sobre-proyecto strong { color: var(--tinta-media); font-weight: 600; }
 
 /* Contacto desbloqueado: es lo que la persona esperaba al pedir la colaboración. */
 .contacto { border: 1px solid var(--borde); border-radius: 12px; padding: 14px; background: #F8FAFE; }
@@ -410,64 +845,122 @@ input.malo, textarea.malo { border-color: var(--rojo); }
 .contacto .dato { display: flex; gap: 8px; }
 .contacto dt { width: 66px; color: var(--tinta-apagada); flex: none; }
 .contacto dd { margin: 0; font-family: var(--mono); font-size: 11.5px; word-break: break-word; min-width: 0; }
-.contacto dd.sin { color: #A8A398; font-style: italic; font-family: var(--cuerpo); }
+.contacto dd.sin { color: var(--tinta-apagada); font-style: italic; font-family: var(--cuerpo); }
+.contacto .acciones { margin-top: 0; }
+.cuerpo-modal .contacto { border: none; padding: 0; background: transparent; }
 
-/* Interruptor de visibilidad del perfil */
+/* Interruptor: role="switch". Suelto en los paneles; con borde (tarjeta) en el perfil. */
 .interruptor {
-  display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 16px; padding: 14px;
-  border-radius: 12px; font-size: 13px; line-height: 1.45; text-align: left;
-  border: 1px solid var(--borde); background: #fff; color: var(--tinta-media);
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 0;
+  border: none; border-top: 1px solid var(--linea); background: transparent; text-align: left; color: var(--tinta);
 }
-.interruptor.encendido { border-color: var(--amarillo); background: #FFF9E8; }
-.interruptor .riel { width: 38px; height: 22px; border-radius: 999px; flex: none; position: relative; transition: .18s; background: var(--borde-campo); }
+.interruptor-texto { flex: 1; }
+.interruptor-texto .titulo { display: block; font-size: 13.5px; font-weight: 600; }
+.interruptor-texto .descripcion { display: block; margin-top: 2px; font-size: 12px; line-height: 1.45; color: var(--tinta-suave); }
+.interruptor .riel { width: 38px; height: 22px; border-radius: 999px; flex: none; position: relative; transition: .18s; background: #C9C4BA; }
 .interruptor.encendido .riel { background: var(--azul-claro); }
+.interruptor.encendido .riel.fijo { background: var(--barra-texto); }
 .interruptor .perilla { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: .18s; }
 .interruptor.encendido .perilla { left: 19px; }
+.interruptor[aria-disabled="true"] { cursor: default; }
+.tarjeta-interruptor {
+  align-items: flex-start; margin-top: 16px; padding: 14px; border: 1px solid var(--borde); border-radius: 12px; background: #fff;
+}
+.tarjeta-interruptor.encendido { border-color: var(--azul-borde); }
+.canales { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.canales .tarjeta-interruptor { margin-top: 0; }
 
-/* --- Mensaje flotante --- */
+/* Los tres estados de un aviso, de publicado a entregado. */
+.estados-aviso {
+  display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; margin-top: 18px; padding-top: 14px;
+  border-top: 1px solid var(--linea); font-size: 12px; color: var(--tinta-suave);
+}
+.estados-aviso .paso { display: inline-flex; align-items: center; gap: 5px; color: var(--verde); font-weight: 600; }
+.estados-aviso .paso::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--verde); }
+
+/* ======================================================================= Mensaje flotante */
+.region-mensaje { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 90; width: max-content; max-width: calc(100vw - 32px); }
 .mensaje {
-  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 90;
   background: var(--azul); color: var(--fondo); padding: 13px 20px; border-radius: 12px;
   font-size: 13.5px; box-shadow: 0 16px 40px rgba(16,35,63,.32);
   animation: sube .2s ease; display: flex; align-items: center; gap: 10px;
 }
 .mensaje::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--amarillo); flex: none; }
-
-/* --- Diagnóstico del token --- */
-/* Columnas fijas: en pantallas angostas se desplaza en vez de aplastar el contenido. */
-.tabla-scroll { overflow-x: auto; margin: 14px 0; }
-.claims { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 420px; }
-.claims th { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--borde); font-family: var(--mono); font-weight: 500; color: var(--tinta-suave); width: 180px; }
-.claims td { padding: 7px 10px; border-bottom: 1px solid var(--borde); word-break: break-all; }
-.claims em { color: var(--tinta-apagada); }
-summary { cursor: pointer; font-size: 13px; color: var(--tinta-suave); }
-pre { overflow-x: auto; background: var(--fondo-hueso); padding: 14px; border-radius: 10px; font-size: 12px; }
-
-.insignia-rol {
-  font-family: var(--mono); font-size: 10px; letter-spacing: .04em;
-  padding: 3px 7px; border: 1px solid #2E4468; border-radius: 5px; color: #8FA6C8;
+.accion-mensaje {
+  margin-left: 6px; background: transparent; border: none; padding: 2px 4px;
+  color: var(--amarillo); font-weight: 700; font-size: 13.5px; text-decoration: underline;
 }
 
-/* --- Pantallas angostas --- No es un rediseño para móvil: que nada se desborde y se pueda usar. */
+/* ======================================================================= Administración */
+.pestanas { display: flex; gap: 6px; margin-bottom: 22px; border-bottom: 1px solid var(--borde); overflow-x: auto; }
+.pestanas button {
+  padding: 10px 16px; border: none; background: transparent; color: var(--tinta-suave);
+  font-weight: 600; font-size: 14px; border-bottom: 3px solid transparent; margin-bottom: -1px; white-space: nowrap;
+}
+.pestanas button:hover { color: var(--tinta); }
+.pestanas button.activa { color: var(--azul-claro); border-bottom-color: var(--azul-claro); }
+
+.cifras { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr)); gap: 14px; margin-bottom: 18px; }
+.cifra {
+  background: #fff; border: 1px solid var(--borde); border-radius: 14px; padding: 16px 18px;
+  display: grid; gap: 2px; min-width: 0; animation: sube .3s ease both;
+}
+.cifra strong { font-family: var(--titulos); font-size: 32px; font-weight: 800; line-height: 1.1; color: var(--azul); }
+.cifra span { font-size: 13px; font-weight: 600; color: var(--tinta-media); }
+.cifra small { font-size: 12px; color: var(--tinta-apagada); }
+.cifra.alerta { border-color: var(--rojo-borde); background: var(--rojo-fondo); }
+.cifra.alerta strong { color: var(--rojo-texto); }
+
+.barras ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
+.barras li { display: grid; grid-template-columns: minmax(0, 40%) 1fr auto; align-items: center; gap: 10px; font-size: 13px; }
+.barras .etiqueta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--tinta-media); }
+.barras .riel-barra { height: 10px; border-radius: 5px; background: var(--linea); overflow: hidden; }
+/* El ancho llega como proporción (0 a 1) en una variable: el cálculo queda en el CSS. Crece al aparecer. */
+.barras .relleno {
+  display: block; height: 100%; width: calc(var(--proporcion, 0) * 100%);
+  background: var(--azul-claro); border-radius: 5px; animation: crece .7s ease-out;
+}
+.barras .numero { font-family: var(--mono); font-size: 12px; color: var(--tinta-suave); min-width: 2ch; text-align: right; }
+
+/* Columnas fijas: en pantallas angostas se desplaza en vez de aplastar el contenido. */
+.tabla-scroll { overflow-x: auto; margin: 14px 0; }
+.tabla-admin { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.tabla-admin th { text-align: left; font-size: 11.5px; font-weight: 600; color: var(--tinta-apagada); padding: 8px 10px; border-bottom: 1px solid var(--borde); }
+.tabla-admin td { padding: 12px 10px; border-bottom: 1px solid var(--linea); vertical-align: top; }
+.tabla-admin td strong { display: block; }
+.tabla-admin td .ayuda { display: block; font-size: 12px; }
+.tabla-admin .insignia.moderado { max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; }
+.acciones-fila { display: flex; gap: 6px; justify-content: flex-end; }
+.acciones-fila .secundario { padding: 7px 11px; font-size: 12.5px; }
+
+.comentario-admin { display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; align-items: center; padding: 16px 18px; }
+.comentario-admin p { margin: 0; grid-column: 1; overflow-wrap: anywhere; }
+.comentario-admin .ayuda { grid-column: 1; }
+.comentario-admin .secundario { grid-column: 2; grid-row: 1 / span 2; padding: 8px 12px; font-size: 12.5px; }
+@media (max-width: 560px) {
+  .comentario-admin { grid-template-columns: 1fr; }
+  .comentario-admin .secundario { grid-column: 1; grid-row: auto; justify-self: start; }
+}
+
+/* ======================================================================= Pantallas angostas */
+/* No es un rediseño para móvil: que nada se desborde y todo se pueda usar. */
 @media (max-width: 640px) {
   main { padding: 22px 16px 60px; }
   .barra { padding: 8px 14px; gap: 8px 10px; }
   .tarjeta { padding: 18px; }
   .titulo-pagina { gap: 12px; margin-bottom: 18px; }
-  .titulo-pagina .principal { width: 100%; }
-  .filtros { padding: 12px; gap: 8px; }
-  /* Los desplegables sueltan el tope y van de a dos por fila. */
-  .filtros select { flex: 1 1 calc(50% - 4px); max-width: none; }
-  .filtros .buscador { flex: 1 1 100%; }
-  .filtros .resumen { margin-left: 0; }
+  .acciones-pagina, .acciones-pagina > * { width: 100%; }
+  .filtros { padding: 14px; }
+  .grupo-chips > .rotulo, .buscador > .rotulo { width: 100%; }
   .cabecera-perfil { gap: 12px; margin-bottom: 20px; }
   .cabecera-perfil .marca-grande { width: 48px; height: 48px; font-size: 18px; }
   .drawer-cabecera { padding: 14px 16px; }
   .drawer-cuerpo { padding: 18px 16px 32px; }
   .modal-caja { padding: 16px 12px; }
-  .modal form { padding: 18px 16px 20px; }
+  .modal form, .cuerpo-modal { padding: 18px 16px 20px; }
   .escribir { flex-wrap: wrap; }
   .escribir button { width: 100%; }
+  .emergentes { top: auto; bottom: 16px; }
 }
 
 /* Los menús cuelgan del botón porque en escritorio está pegado al borde derecho. Cuando la
@@ -477,32 +970,7 @@ pre { overflow-x: auto; background: var(--fondo-hueso); padding: 14px; border-ra
   .barra { position: relative; }
   .desplegable { position: static; }
   .panel-flotante { top: calc(100% - 4px); left: 14px; right: 14px; }
-  .panel-flotante.ancho,
+  .panel-flotante.notificaciones,
+  .panel-flotante.accesibilidad,
   .panel-flotante.angosto { width: auto; }
 }
-
-/* Destinatario en la ventana de pedir contacto. */
-.destinatario { display: flex; align-items: center; gap: 11px; }
-.destinatario .iniciales { width: 40px; height: 40px; font-size: 13px; }
-.destinatario strong { display: block; font-size: 15px; }
-.destinatario span { display: block; font-size: 12.5px; color: var(--tinta-apagada); }
-
-/* La tarjeta de una colaboración: los datos van detrás del botón, no a la vista. */
-.contacto .acciones { margin-top: 0; }
-.cuerpo-modal .contacto { border: none; padding: 0; background: transparent; }
-.cuerpo-modal .consentimiento p:last-child { margin-bottom: 0; }
-
-/* Campo de archivos adjuntos del formulario de proyecto. */
-.adjuntos-campo { display: grid; gap: 8px; }
-.adjuntos-campo .etiqueta-campo { font-size: 13px; font-weight: 500; color: var(--tinta-media); }
-.adjuntos-campo .adjunto { display: flex; align-items: center; gap: 9px; font-size: 13px; }
-.adjuntos-campo .adjunto .cerrar { width: 24px; height: 24px; padding: 0; font-size: 15px; line-height: 1; }
-.adjuntos-campo > button { justify-self: start; }
-
-/* Casilla de consentimiento dentro de los modales. */
-.casilla { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--tinta-media); cursor: pointer; }
-.casilla input { width: 15px; height: 15px; margin: 0; cursor: pointer; accent-color: var(--azul-claro); }
-
-/* Sobre qué proyecto es una solicitud o una colaboración. */
-.sobre-proyecto { font-size: 12px; color: var(--tinta-apagada); margin: 2px 0 0; }
-.sobre-proyecto strong { color: var(--tinta-media); font-weight: 600; }

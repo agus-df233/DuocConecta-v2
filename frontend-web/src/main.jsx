@@ -1,6 +1,6 @@
 // Punto de arranque del SPA.
-// MSAL tiene que inicializarse antes de pintar nada: si React monta primero, cualquier
-// componente que pida el token se encuentra con un cliente a medio configurar.
+// La sesión se prepara antes de pintar nada: si React monta primero, la vuelta del login
+// (de Microsoft o de Google) todavía no se procesó y la aplicación mostraría la pantalla de entrada.
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'

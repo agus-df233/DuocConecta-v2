@@ -1,9 +1,10 @@
 // Solicitudes de colaboración y contactos desbloqueados.
 // Viven dentro del perfil porque son datos personales, no de la vitrina.
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { colaboracionesRecibidas, colaboracionesEnviadas, responderColaboracion } from './api'
 import { ESTADOS_SOLICITUD, fechaLarga } from './catalogo'
 import DatosDeContacto from './DatosDeContacto'
+import { alCambiar } from './eventos'
 
 /** Las dos bandejas, compartidas entre solicitudes y colaboraciones para no pedirlas dos veces. */
 export function useColaboraciones() {
@@ -11,32 +12,39 @@ export function useColaboraciones() {
   const [enviadas, setEnviadas] = useState(null)
   const [error, setError] = useState(null)
 
-  const recargar = () => {
+  const recargar = useCallback(() => {
     setError(null)
     Promise.all([colaboracionesRecibidas(), colaboracionesEnviadas()])
       .then(([r, e]) => { setRecibidas(r); setEnviadas(e) })
       .catch((e) => { setRecibidas([]); setEnviadas([]); setError(e.message) })
-  }
+  }, [])
 
-  useEffect(recargar, [])
+  useEffect(recargar, [recargar])
+  // Una respuesta desde la cabecera o un aviso nuevo de colaboración cambian las bandejas.
+  useEffect(() => alCambiar('colaboraciones', recargar), [recargar])
 
   return { recibidas, enviadas, error, recargar }
 }
 
-/** Solo las recibidas y pendientes traen botones: responder es de quien recibe. */
-export function MisSolicitudes({ recibidas, enviadas, alResponder }) {
-  const [pestana, setPestana] = useState('recibidas')
-
+/**
+ * Solo las recibidas y pendientes traen botones: responder es de quien recibe. La pestaña la
+ * controla el perfil, porque un aviso puede pedir abrir directamente las recibidas o las enviadas.
+ */
+export function MisSolicitudes({ pestana, alCambiarPestana, recibidas, enviadas, alResponder, alRetirar }) {
   const lista = pestana === 'recibidas' ? recibidas : enviadas
   if (lista === null) return <p className="ayuda">Cargando tus solicitudes…</p>
 
+  const pendientes = (recibidas ?? []).filter((s) => s.estado === 'PENDIENTE').length
+
   return (
     <>
-      <div className="pestanas">
-        <button className={pestana === 'recibidas' ? 'activo' : ''} onClick={() => setPestana('recibidas')}>
-          Recibidas
+      <div className="segmentos" role="tablist" aria-label="Solicitudes">
+        <button type="button" role="tab" aria-selected={pestana === 'recibidas'}
+                className={pestana === 'recibidas' ? 'activo' : ''} onClick={() => alCambiarPestana('recibidas')}>
+          Recibidas{pendientes > 0 && <span className="contador hay">{pendientes}</span>}
         </button>
-        <button className={pestana === 'enviadas' ? 'activo' : ''} onClick={() => setPestana('enviadas')}>
+        <button type="button" role="tab" aria-selected={pestana === 'enviadas'}
+                className={pestana === 'enviadas' ? 'activo' : ''} onClick={() => alCambiarPestana('enviadas')}>
           Enviadas
         </button>
       </div>
@@ -55,6 +63,7 @@ export function MisSolicitudes({ recibidas, enviadas, alResponder }) {
               solicitud={s}
               esRecibida={pestana === 'recibidas'}
               alResponder={alResponder}
+              alRetirar={alRetirar}
             />
           ))}
         </div>
@@ -63,15 +72,19 @@ export function MisSolicitudes({ recibidas, enviadas, alResponder }) {
   )
 }
 
-/** Una solicitud de cualquiera de las dos bandejas. */
-function Fila({ solicitud, esRecibida, alResponder }) {
+/**
+ * Una solicitud de cualquiera de las dos bandejas. Responder es de quien la recibe; retirarla, de
+ * quien la envió, y las dos cosas solo mientras siga pendiente.
+ */
+function Fila({ solicitud, esRecibida, alResponder, alRetirar }) {
   const otra = esRecibida ? solicitud.solicitante : solicitud.solicitado
-  const puedeResponder = esRecibida && solicitud.estado === 'PENDIENTE'
+  const pendiente = solicitud.estado === 'PENDIENTE'
+  const puedeResponder = esRecibida && pendiente
 
   return (
     <div className="fila-solicitud">
       <div className="etiquetas">
-        <span className={`insignia ${solicitud.estado}`}>{ESTADOS_SOLICITUD[solicitud.estado]}</span>
+        <span className={`pildora ${solicitud.estado}`}>{ESTADOS_SOLICITUD[solicitud.estado]}</span>
         <span className="fecha">{fechaLarga(solicitud.fechaSolicitud)}</span>
       </div>
 
@@ -85,12 +98,45 @@ function Fila({ solicitud, esRecibida, alResponder }) {
       )}
       {solicitud.mensaje && <p className="cita">“{solicitud.mensaje}”</p>}
 
+      <PasosSolicitud estado={solicitud.estado} esRecibida={esRecibida} />
+
       {puedeResponder && (
         <div className="acciones">
-          <button className="principal" onClick={() => alResponder(solicitud, true)}>Aceptar</button>
-          <button className="secundario" onClick={() => alResponder(solicitud, false)}>Rechazar</button>
+          <button type="button" className="principal" onClick={() => alResponder(solicitud, true)}>Aceptar</button>
+          <button type="button" className="secundario" onClick={() => alResponder(solicitud, false)}>Rechazar</button>
         </div>
       )}
+      {!esRecibida && pendiente && alRetirar && (
+        <div className="acciones">
+          <button type="button" className="enlace peligro" onClick={() => alRetirar(solicitud)}>Retirar solicitud</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Cómo termina cada solicitud, contado desde quien la mira. */
+const FINAL_SOLICITUD = {
+  ACEPTADA: 'Aceptada',
+  RECHAZADA: 'Rechazada',
+  RETIRADA: 'Retirada',
+}
+
+/**
+ * El avance de una solicitud: enviada y luego su respuesta. Los puntos son decorativos; el lector
+ * de pantalla recibe la misma información en una frase.
+ */
+export function PasosSolicitud({ estado, esRecibida }) {
+  const final = estado === 'PENDIENTE'
+    ? (esRecibida ? 'Esperando tu respuesta' : 'Esperando respuesta')
+    : FINAL_SOLICITUD[estado] ?? estado
+  return (
+    <div className="pasos-solicitud">
+      <span className="solo-lector">Estado de la solicitud: {final}.</span>
+      <ol aria-hidden="true">
+        <li className="hecho">Enviada</li>
+        <li className={estado === 'PENDIENTE' ? 'actual' : `hecho ${estado}`}>{final}</li>
+      </ol>
     </div>
   )
 }
@@ -126,7 +172,7 @@ export function MisColaboraciones({ recibidas, enviadas }) {
               <p className="sobre-proyecto">Sobre <strong>{s.proyectoNombre}</strong></p>
             )}
             <div className="acciones">
-              <button className="secundario" onClick={() => setAbierta({ s, otra })}>
+              <button type="button" className="secundario" onClick={() => setAbierta({ s, otra })}>
                 Ver datos de contacto
               </button>
             </div>

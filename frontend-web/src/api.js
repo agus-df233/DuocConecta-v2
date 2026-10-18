@@ -1,4 +1,4 @@
-// Cliente del BFF. Cada petición lleva el access token de Azure AD en la cabecera Authorization.
+// Cliente de la API. Cada petición lleva el token del proveedor con que se entró (Microsoft o Google).
 
 import { obtenerToken } from './auth'
 
@@ -142,6 +142,10 @@ export const responderColaboracion = (id, aceptar, compartirTelefono = false) =>
     body: JSON.stringify({ aceptar, compartirTelefono }),
   })
 
+/** Retira una solicitud que envié y que nadie ha respondido todavía. */
+export const retirarColaboracion = (id) =>
+  pedir(`/api/v1/bff/colaboraciones/${id}/retirar`, { method: 'PATCH' })
+
 /** Solicitudes que otras personas me enviaron. */
 export const colaboracionesRecibidas = () => pedir('/api/v1/bff/colaboraciones/recibidas')
 
@@ -159,3 +163,37 @@ export const listarAvisos = () => pedir('/api/v1/notificaciones')
 /** Marca un aviso propio como leído. */
 export const marcarAvisoLeido = (id) =>
   pedir(`/api/v1/notificaciones/${id}/leido`, { method: 'PATCH' })
+
+// --- Administración (solo ADMINISTRADOR) --------------------------------------
+//
+// El resumen va por el BFF porque cruza ms-usuarios con ms-proyectos (proyectos por carrera).
+// Moderar va directo a ms-proyectos, igual que publicar: no hay nada que componer.
+
+/** Cifras de la comunidad y de la vitrina para el dashboard. */
+export const resumenAdministracion = () => pedir('/api/v1/bff/admin/resumen')
+
+/** Todos los proyectos, incluidos privados y ocultos. Los filtros son opcionales. */
+export const proyectosParaModerar = ({ oculto, visibilidad } = {}) => {
+  const filtros = new URLSearchParams()
+  if (oculto !== undefined && oculto !== '') filtros.set('oculto', oculto)
+  if (visibilidad) filtros.set('visibilidad', visibilidad)
+  const consulta = filtros.toString()
+  return pedir(`/api/v1/proyectos/admin${consulta ? `?${consulta}` : ''}`)
+}
+
+/** Saca un proyecto de la vitrina. La dueña recibe un aviso con el motivo. */
+export const ocultarProyecto = (id, motivo) =>
+  pedir(`/api/v1/proyectos/admin/${id}/ocultar`, { method: 'PATCH', body: JSON.stringify({ motivo }) })
+
+/** Devuelve a la vitrina un proyecto oculto por moderación. */
+export const mostrarProyecto = (id) => pedir(`/api/v1/proyectos/admin/${id}/mostrar`, { method: 'PATCH' })
+
+/** Borra cualquier proyecto, sin la regla de dueña. */
+export const eliminarProyectoModerado = (id) => pedir(`/api/v1/proyectos/admin/${id}`, { method: 'DELETE' })
+
+/** Los 50 comentarios más recientes de toda la plataforma. */
+export const comentariosParaModerar = () => pedir('/api/v1/proyectos/admin/comentarios')
+
+/** Borra un comentario. Quien lo escribió recibe un aviso. */
+export const eliminarComentarioModerado = (id) =>
+  pedir(`/api/v1/proyectos/admin/comentarios/${id}`, { method: 'DELETE' })

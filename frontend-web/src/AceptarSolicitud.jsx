@@ -4,6 +4,7 @@
 // exacto del consentimiento— y merece verse como tal, no como un diálogo del sistema.
 import { useState } from 'react'
 import { iniciales } from './catalogo'
+import Ventana from './Ventana'
 
 export default function AceptarSolicitud({ solicitud, alConfirmar, alCerrar }) {
   const [compartirTelefono, setCompartirTelefono] = useState(false)
@@ -23,53 +24,43 @@ export default function AceptarSolicitud({ solicitud, alConfirmar, alCerrar }) {
   }
 
   return (
-    <>
-      <div className="modal-fondo" onClick={alCerrar} />
-      <div className="modal-caja">
-        <div className="modal">
-          <div className="modal-cabecera">
-            <h2>Aceptar solicitud</h2>
-            <button className="cerrar" onClick={alCerrar} aria-label="Cerrar">×</button>
+    <Ventana titulo="Aceptar solicitud" alCerrar={alCerrar}>
+      <form onSubmit={confirmar}>
+        <div className="destinatario">
+          <div className="iniciales">{iniciales(quien.nombre)}</div>
+          <div>
+            <strong>{nombre}</strong>
+            <span>{[quien.carrera, quien.sede].filter(Boolean).join(' · ')}</span>
           </div>
-
-          <form onSubmit={confirmar}>
-            <div className="destinatario">
-              <div className="iniciales">{iniciales(quien.nombre)}</div>
-              <div>
-                <strong>{nombre}</strong>
-                <span>{[quien.carrera, quien.sede].filter(Boolean).join(' · ')}</span>
-              </div>
-            </div>
-
-            {solicitud.proyectoNombre && (
-              <p className="ayuda">Sobre <strong>{solicitud.proyectoNombre}</strong>.</p>
-            )}
-
-            <div className="consentimiento">
-              <h4>Qué se comparte al aceptar</h4>
-              <p>
-                Tu correo institucional y tus redes. A cambio verás los datos que
-                {' '}{nombre.split(' ')[0]} ofreció al escribirte.
-              </p>
-              <label className="casilla">
-                <input
-                  type="checkbox"
-                  checked={compartirTelefono}
-                  onChange={(e) => setCompartirTelefono(e.target.checked)}
-                />
-                Compartir también mi teléfono
-              </label>
-            </div>
-
-            <div className="acciones">
-              <button className="principal" type="submit" disabled={enviando}>
-                {enviando ? 'Aceptando…' : 'Aceptar y compartir'}
-              </button>
-              <button className="secundario" type="button" onClick={alCerrar}>Cancelar</button>
-            </div>
-          </form>
         </div>
-      </div>
-    </>
+
+        {solicitud.proyectoNombre && (
+          <p className="ayuda">Sobre <strong>{solicitud.proyectoNombre}</strong>.</p>
+        )}
+
+        <div className="consentimiento">
+          <h4><span className="candado" aria-hidden="true" />Qué se comparte al aceptar</h4>
+          <p>
+            Tu correo institucional y tus redes. A cambio verás los datos que
+            {' '}{nombre.split(' ')[0]} ofreció al escribirte.
+          </p>
+          <label className="casilla">
+            <input
+              type="checkbox"
+              checked={compartirTelefono}
+              onChange={(e) => setCompartirTelefono(e.target.checked)}
+            />
+            Compartir también mi teléfono
+          </label>
+        </div>
+
+        <div className="acciones">
+          <button className="principal" type="submit" disabled={enviando}>
+            {enviando ? 'Aceptando…' : 'Aceptar y compartir'}
+          </button>
+          <button className="secundario" type="button" onClick={alCerrar}>Cancelar</button>
+        </div>
+      </form>
+    </Ventana>
   )
 }

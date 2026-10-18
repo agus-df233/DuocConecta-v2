@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import AdjuntosProyecto from './AdjuntosProyecto'
 import { ESTADOS, HERRAMIENTAS_SUGERIDAS, SEDES } from './catalogo'
+import Ventana from './Ventana'
 
 /** Un proyecto nuevo empieza público y buscando equipo, que es el caso más común. */
 const VACIO = {
@@ -18,6 +19,7 @@ export default function FormularioProyecto({ proyecto, alGuardar, alCerrar }) {
 
   const editando = Boolean(proyecto?.id)
 
+  // aria-invalid y aria-describedby: el lector de pantalla anuncia el error junto con el campo.
   const campo = (clave) => ({
     value: datos[clave] ?? '',
     onChange: (e) => {
@@ -25,6 +27,8 @@ export default function FormularioProyecto({ proyecto, alGuardar, alCerrar }) {
       setErrores({ ...errores, [clave]: '' })
     },
     className: errores[clave] ? 'malo' : '',
+    'aria-invalid': Boolean(errores[clave]),
+    'aria-describedby': errores[clave] ? `error-${clave}` : undefined,
   })
 
   /**
@@ -56,9 +60,11 @@ export default function FormularioProyecto({ proyecto, alGuardar, alCerrar }) {
     const datosFinales = { ...datos, ...pendientes }
 
     const fallos = {}
-    if (!datos.nombre.trim()) fallos.nombre = 'Ponle un nombre al proyecto.'
-    if (!datos.resumen.trim()) fallos.resumen = 'El resumen es lo único que se lee en la tarjeta.'
-    if (datos.resumen.length > 200) fallos.resumen = 'El resumen es de una línea: hasta 200 caracteres.'
+    // Un proyecto viejo puede traer el resumen en null: se trata como vacío y no rompe el formulario.
+    const resumen = datos.resumen ?? ''
+    if (!(datos.nombre ?? '').trim()) fallos.nombre = 'Ponle un nombre al proyecto.'
+    if (!resumen.trim()) fallos.resumen = 'El resumen es lo único que se lee en la tarjeta.'
+    if (resumen.length > 200) fallos.resumen = 'El resumen es de una línea: hasta 200 caracteres.'
     if (Object.keys(fallos).length > 0) { setErrores(fallos); return }
 
     setGuardando(true)
@@ -70,97 +76,88 @@ export default function FormularioProyecto({ proyecto, alGuardar, alCerrar }) {
   }
 
   return (
-    <>
-      <div className="modal-fondo" onClick={alCerrar} />
-      <div className="modal-caja">
-        <div className="modal">
-          <div className="modal-cabecera">
-            <h2>{editando ? 'Editar proyecto' : 'Publicar un proyecto'}</h2>
-            <button className="cerrar" onClick={alCerrar} aria-label="Cerrar">×</button>
-          </div>
+    <Ventana titulo={editando ? 'Editar proyecto' : 'Publicar un proyecto'} alCerrar={alCerrar}>
+      <form onSubmit={enviar}>
+        <label>
+          Nombre *
+          <input maxLength={150} placeholder="Nombre del proyecto" {...campo('nombre')} />
+          {errores.nombre && <span id="error-nombre" className="mensaje-campo" role="alert">{errores.nombre}</span>}
+        </label>
 
-          <form onSubmit={enviar}>
-            <label>
-              Nombre *
-              <input maxLength={150} placeholder="Nombre del proyecto" {...campo('nombre')} />
-              {errores.nombre && <span className="mensaje-campo">{errores.nombre}</span>}
-            </label>
+        <label>
+          Resumen *
+          <input maxLength={200} placeholder="Una línea que resuma el proyecto" {...campo('resumen')} />
+          <span className="contador-campo" aria-hidden="true">{(datos.resumen ?? '').length}/200</span>
+          {errores.resumen && <span id="error-resumen" className="mensaje-campo" role="alert">{errores.resumen}</span>}
+        </label>
 
-            <label>
-              Resumen *
-              <input maxLength={200} placeholder="Una línea que resuma el proyecto" {...campo('resumen')} />
-              {errores.resumen && <span className="mensaje-campo">{errores.resumen}</span>}
-            </label>
+        <label>
+          Detalle
+          <textarea
+            rows={4}
+            maxLength={2000}
+            placeholder="Qué resuelve, en qué etapa está, qué ayuda necesitas"
+            {...campo('descripcion')}
+          />
+        </label>
 
-            <label>
-              Detalle
-              <textarea
-                rows={4}
-                maxLength={2000}
-                placeholder="Qué resuelve, en qué etapa está, qué ayuda necesitas"
-                {...campo('descripcion')}
-              />
-            </label>
-
-            <div className="dos-columnas">
-              <label>
-                Herramientas (separadas por comas)
-                <input
-                  list="herramientas-sugeridas"
-                  placeholder={HERRAMIENTAS_SUGERIDAS.slice(0, 3).join(', ')}
-                  {...lista('herramientas')}
-                />
-                <datalist id="herramientas-sugeridas">
-                  {HERRAMIENTAS_SUGERIDAS.map((h) => <option key={h} value={h} />)}
-                </datalist>
-              </label>
-
-              <label>
-                Estado *
-                <select {...campo('estado')}>
-                  {Object.entries(ESTADOS).map(([valor, texto]) => (
-                    <option key={valor} value={valor}>{texto}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="dos-columnas">
-              <label>
-                Sede
-                <select {...campo('sede')}>
-                  {SEDES.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </label>
-
-              <label>
-                Visibilidad
-                <select {...campo('visibilidad')}>
-                  <option value="PUBLICO">Visible en la vitrina</option>
-                  <option value="PRIVADO">Solo para mí</option>
-                </select>
-              </label>
-            </div>
-
-            <label>
-              Enlace al repositorio o al trabajo
-              <input type="url" placeholder="https://…" {...campo('urlRepositorio')} />
-            </label>
-
-            <AdjuntosProyecto
-              adjuntos={datos.adjuntos ?? []}
-              alCambiar={(adjuntos) => setDatos({ ...datos, adjuntos })}
+        <div className="dos-columnas">
+          <label>
+            Herramientas (separadas por comas)
+            <input
+              list="herramientas-sugeridas"
+              placeholder={HERRAMIENTAS_SUGERIDAS.slice(0, 3).join(', ')}
+              {...lista('herramientas')}
             />
+            <datalist id="herramientas-sugeridas">
+              {HERRAMIENTAS_SUGERIDAS.map((h) => <option key={h} value={h} />)}
+            </datalist>
+          </label>
 
-            <div className="acciones">
-              <button className="principal" type="submit" disabled={guardando}>
-                {guardando ? 'Guardando…' : (editando ? 'Guardar cambios' : 'Publicar')}
-              </button>
-              <button className="secundario" type="button" onClick={alCerrar}>Cancelar</button>
-            </div>
-          </form>
+          <label>
+            Estado *
+            <select {...campo('estado')}>
+              {Object.entries(ESTADOS).map(([valor, texto]) => (
+                <option key={valor} value={valor}>{texto}</option>
+              ))}
+            </select>
+          </label>
         </div>
-      </div>
-    </>
+
+        <div className="dos-columnas">
+          <label>
+            Sede
+            <select {...campo('sede')}>
+              {SEDES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </label>
+
+          <label>
+            Visibilidad
+            <select {...campo('visibilidad')}>
+              <option value="PUBLICO">Visible en la vitrina</option>
+              <option value="PRIVADO">Solo para mí</option>
+            </select>
+          </label>
+        </div>
+
+        <label>
+          Enlace al repositorio o al trabajo
+          <input type="url" placeholder="https://…" {...campo('urlRepositorio')} />
+        </label>
+
+        <AdjuntosProyecto
+          adjuntos={datos.adjuntos ?? []}
+          alCambiar={(adjuntos) => setDatos({ ...datos, adjuntos })}
+        />
+
+        <div className="acciones">
+          <button className="principal" type="submit" disabled={guardando}>
+            {guardando ? 'Guardando…' : (editando ? 'Guardar cambios' : 'Publicar')}
+          </button>
+          <button className="secundario" type="button" onClick={alCerrar}>Cancelar</button>
+        </div>
+      </form>
+    </Ventana>
   )
 }

@@ -63,7 +63,7 @@ export default function AdjuntosProyecto({ adjuntos, alCambiar }) {
       {adjuntos.map((a, i) => (
         <div key={a.claveS3 ?? a.urlExterna ?? i} className="adjunto">
           <span className="hoja" />
-          <span style={{ flex: 1 }}>{a.nombre}</span>
+          <span className="crece">{a.nombre}</span>
           <span className="ayuda">{pesoLegible(a.tamanoBytes)}</span>
           <button type="button" className="cerrar" onClick={() => quitar(i)} aria-label="Quitar">×</button>
         </div>
@@ -72,7 +72,7 @@ export default function AdjuntosProyecto({ adjuntos, alCambiar }) {
       {subiendo.map((s) => (
         <div key={s.nombre} className="adjunto">
           <span className="hoja" />
-          <span style={{ flex: 1 }}>{s.nombre}</span>
+          <span className="crece">{s.nombre}</span>
           <span className="ayuda">{s.progreso}%</span>
         </div>
       ))}
@@ -83,7 +83,7 @@ export default function AdjuntosProyecto({ adjuntos, alCambiar }) {
         ref={entrada}
         type="file"
         multiple
-        style={{ display: 'none' }}
+        hidden
         onChange={elegir}
       />
       <button
