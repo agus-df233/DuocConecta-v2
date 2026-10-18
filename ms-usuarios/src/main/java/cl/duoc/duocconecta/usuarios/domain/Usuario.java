@@ -38,7 +38,7 @@ public class Usuario {
     private UUID id;
 
     /**
-     * Identificador de la persona en Azure AD (claim {@code oid} del token).
+     * Identificador estable de la persona en el IdP: claim {@code sub} en Cognito ({@code oid} con Entra, en la EP1). La columna conserva su nombre.
      *
      * <p>Es la clave real por la que se busca al usuario: a diferencia del correo, nunca cambia.</p>
      */
@@ -53,7 +53,7 @@ public class Usuario {
     @Column(name = "correo", nullable = false, unique = true, length = 180)
     private String correo;
 
-    /** Rol derivado del dominio del correo o de los App Roles de Azure AD. */
+    /** Rol derivado del dominio del correo o de los grupos del IdP. */
     @Enumerated(EnumType.STRING)
     @Column(name = "rol", nullable = false, length = 20)
     private Rol rol;
@@ -109,7 +109,7 @@ public class Usuario {
     /**
      * Crea un perfil nuevo a partir de los datos que vienen en el token.
      *
-     * @param oidEntra identificador de la persona en Azure AD
+     * @param oidEntra identificador de la persona en el IdP
      * @param nombre   nombre para mostrar
      * @param correo   correo institucional en minúsculas
      * @param rol      rol ya resuelto
@@ -173,7 +173,7 @@ public class Usuario {
     }
 
     /**
-     * Actualiza los datos que vienen del token, por si cambiaron en Azure AD desde el último acceso.
+     * Actualiza los datos que vienen del token, por si cambiaron en el IdP desde el último acceso.
      */
     public void sincronizarDesdeToken(String nombre, String correo, Rol rol) {
         if (nombre != null && !nombre.isBlank()) {

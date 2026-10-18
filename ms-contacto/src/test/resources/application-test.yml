@@ -28,7 +28,7 @@ spring:
       resourceserver:
         jwt:
           # Se deja en blanco a propósito para tapar el valor de application.yml, que
-          # contiene el placeholder ${AZURE_TENANT_ID} y no se puede resolver aquí.
+          # contiene el placeholder ${OIDC_ISSUER_URI} y no se puede resolver aquí.
           issuer-uri: ""
           # Se usa jwk-set-uri y NO issuer-uri a propósito: issuer-uri hace descubrimiento
           # OIDC contra la red al arrancar el contexto, y el test fallaría sin internet.
@@ -47,3 +47,15 @@ duocconecta:
       duocuc.cl: ESTUDIANTE
       profesor.duoc.cl: PROFESOR
       duoc.cl: ACADEMICO
+
+# RabbitMQ apagado en los tests: no hace falta un broker para que el contexto levante.
+---
+spring:
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+duocconecta:
+  mensajeria:
+    rabbit:
+      habilitada: false

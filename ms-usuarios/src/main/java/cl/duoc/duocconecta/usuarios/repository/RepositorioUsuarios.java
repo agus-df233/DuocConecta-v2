@@ -1,6 +1,7 @@
 package cl.duoc.duocconecta.usuarios.repository;
 
 import cl.duoc.duocconecta.usuarios.domain.Usuario;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -40,4 +41,19 @@ public interface RepositorioUsuarios extends JpaRepository<Usuario, UUID> {
 
     /** Los demás microservicios guardan el {@code oid}, no el id interno. */
     Optional<Usuario> findByOidEntraAndVisibleIsTrue(String oidEntra);
+
+    /** Total de perfiles visibles, para el dashboard de administración. */
+    long countByVisibleIsTrue();
+
+    /** Cantidad de perfiles por rol: cada fila es {@code [rol, cantidad]}. */
+    @Query("SELECT u.rol, COUNT(u) FROM Usuario u GROUP BY u.rol ORDER BY COUNT(u) DESC")
+    List<Object[]> contarPorRol();
+
+    /** Cantidad de perfiles por carrera; la carrera nula llega como una fila más. */
+    @Query("SELECT u.carrera, COUNT(u) FROM Usuario u GROUP BY u.carrera ORDER BY COUNT(u) DESC")
+    List<Object[]> contarPorCarrera();
+
+    /** Cantidad de perfiles por sede; la sede nula llega como una fila más. */
+    @Query("SELECT u.sede, COUNT(u) FROM Usuario u GROUP BY u.sede ORDER BY COUNT(u) DESC")
+    List<Object[]> contarPorSede();
 }

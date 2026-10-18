@@ -6,6 +6,22 @@ server:
   port: 8083
 
 spring:
+  # RabbitMQ (EP2), el segundo broker: clúster de 2 nodos. Credenciales por variable de entorno.
+  rabbitmq:
+    addresses: ${RABBITMQ_ADDRESSES:localhost:5672,localhost:5673}
+    username: ${RABBITMQ_USUARIO:duocconecta}
+    password: ${RABBITMQ_CLAVE:duocconecta}
+    # Corto a propósito: se publica después del commit en el mismo hilo de la petición. Con el
+    # valor por defecto (60 s por dirección), un RabbitMQ caído dejaba colgada cada escritura.
+    connection-timeout: 2s
+    # El broker confirma cada publicación (publisher confirm); un rechazo queda en el log.
+    publisher-confirm-type: correlated
+    listener:
+      simple:
+        # Pocos mensajes a la vez: la tarea comparte CPU con otras JVM.
+        prefetch: 5
+        auto-startup: ${CONSUMIDORES_ACTIVOS:true}
+
   application:
     name: ms-contacto
 
@@ -46,6 +62,24 @@ spring:
 duocconecta:
   # Mensajería (EP2). Los nombres viven solo aquí: el código no escribe ninguno a mano.
   mensajeria:
+    # RabbitMQ: los mismos eventos que SNS. Topic exchange (routing key = tipo) y un DLX direct.
+    rabbit:
+      habilitada: ${RABBITMQ_HABILITADA:true}
+      exchange: ${RABBITMQ_EXCHANGE:duocconecta.eventos}
+      dlx: ${RABBITMQ_DLX:duocconecta.dlx}
+      max-entregas: 3                          # a la tercera, la cola quorum lo manda al DLX
+      colas:
+        proyectos: duocconecta.notificaciones.proyectos
+        colaboraciones: duocconecta.notificaciones.colaboraciones
+        auditoria: duocconecta.auditoria
+      descartes:
+        proyectos: duocconecta.notificaciones.proyectos.descartes
+        colaboraciones: duocconecta.notificaciones.colaboraciones.descartes
+        auditoria: duocconecta.auditoria.descartes
+      bindings:                                # qué tipos recibe cada cola
+        proyectos: "proyecto.#"
+        colaboraciones: "colaboracion.#"
+        auditoria: "#"
     # En falso los eventos solo se registran en el log (tests, o trabajar sin AWS).
     habilitada: ${MENSAJERIA_HABILITADA:true}
     region: ${AWS_REGION:us-east-1}
@@ -77,12 +111,25 @@ duocconecta:
       - given_name
       - preferred_username
 
-    # Claim con los App Roles de Azure AD. Se suman al rol del dominio, nunca lo reemplazan.
-    claim-roles: roles
+    # Grupos o roles que vienen en el token: App Roles de Entra ID ('roles') y grupos del user pool
+    # de Cognito ('cognito:groups'). Se suman al rol del dominio, nunca lo reemplazan.
+    claims-roles:
+      - roles
+      - cognito:groups
 
-    # Vía B para el rol ADMINISTRADOR, si el tenant no permite App Roles: correos separados por
+    # Login con Google: Cognito emite un ID token con su propio emisor y audiencia. Una entrada con
+    # issuer-uri vacío se ignora, así en local sin Cognito todo funciona solo con Microsoft.
+    emisores-adicionales:
+      - issuer-uri: ${COGNITO_ISSUER_URI:}
+        audiencia: ${COGNITO_AUDIENCIA:}
+        # Entra ID no emite email_verified; Cognito sí, y sin verificar no se da rol.
+        exigir-correo-verificado: true
+
+    # Rol ADMINISTRADOR por lista (además del App Role o del grupo ADMINISTRADOR): correos separados por
     # coma. Vacía por defecto; el valor real va en .env o en la task definition, nunca aquí.
     administradores: ${ADMINISTRADORES:}
+    # Cuentas externas (Google) con su rol: correo=ROL separados por coma. Fuera de la lista, 403.
+    correos-permitidos: ${CORREOS_PERMITIDOS:}
 
     # Mapa de dominio de correo a rol. Sumar un dominio nuevo es agregar una línea aquí:
     # no hace falta tocar el código.
@@ -92,6 +139,10 @@ duocconecta:
       duoc.cl: ACADEMICO
 
 management:
+  # Si RabbitMQ se cae, el servicio sigue sano: el otro broker y el resto de la API funcionan.
+  health:
+    rabbit:
+      enabled: false
   endpoints:
     web:
       exposure:

@@ -2,6 +2,7 @@ package cl.duoc.duocconecta.bff.service;
 
 import cl.duoc.duocconecta.bff.dto.ComentarioDatos;
 import cl.duoc.duocconecta.bff.dto.ComentarioRespuesta;
+import cl.duoc.duocconecta.bff.dto.EstadisticasProyectos;
 import cl.duoc.duocconecta.bff.dto.ProyectoRespuesta;
 import cl.duoc.duocconecta.comun.seguridad.UsuarioActual;
 import java.util.List;
@@ -86,5 +87,14 @@ public class ClienteProyectos {
                 .body(comentario)
                 .retrieve()
                 .body(ComentarioRespuesta.class);
+    }
+
+    /** Cifras de la vitrina. ms-proyectos exige ADMINISTRADOR, igual que el BFF. */
+    public EstadisticasProyectos estadisticas() {
+        return cliente.get()
+                .uri(RUTA + "/admin/estadisticas")
+                .header(HttpHeaders.AUTHORIZATION, usuarioActual.cabeceraAuthorization())
+                .retrieve()
+                .body(EstadisticasProyectos.class);
     }
 }

@@ -9,7 +9,7 @@ import java.util.List;
  * Datos que la persona puede modificar de su propio perfil.
  *
  * <p>Son exactamente los datos que el login NO puede aprovisionar solo. El nombre, el correo, el
- * rol y el identificador de Azure AD no están aquí a propósito: vienen del token, y el nombre además
+ * rol y el identificador del IdP no están aquí a propósito: vienen del token, y el nombre además
  * se resincroniza en cada ingreso, así que dejarlo editable haría que el valor escrito a mano se
  * perdiera en el siguiente login.</p>
  *

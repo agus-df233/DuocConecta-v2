@@ -98,6 +98,23 @@ public class ControladorSolicitudes {
         return ResponseEntity.ok(servicio.responder(id, yo(), respuesta));
     }
 
+    /** Retira una solicitud que envié y que todavía nadie respondió. */
+    @Operation(
+            summary = "Retira una solicitud enviada",
+            description = "Solo quien la envió, y solo mientras siga pendiente. Después se puede volver a pedir por el mismo proyecto.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Solicitud retirada"),
+            @ApiResponse(responseCode = "403", description = "No eres quien la envió", content = @Content),
+            @ApiResponse(responseCode = "409", description = "La solicitud ya fue respondida", content = @Content),
+            @ApiResponse(responseCode = "404", description = "La solicitud no existe", content = @Content)
+    })
+    @PatchMapping("/{id}/retirar")
+    @PreAuthorize(ROLES_DE_LA_PLATAFORMA)
+    public ResponseEntity<SolicitudRespuesta> retirar(
+            @Parameter(description = "Identificador de la solicitud") @PathVariable UUID id) {
+        return ResponseEntity.ok(servicio.retirar(id, yo()));
+    }
+
     /** Solicitudes que otras personas me enviaron. */
     @Operation(
             summary = "Lista las solicitudes recibidas",

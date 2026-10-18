@@ -32,7 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * API REST de perfiles de usuario de DuocConecta.
  *
- * <p>Todos los endpoints exigen un token válido de Azure AD. Los que operan sobre el perfil propio
+ * <p>Todos los endpoints exigen un token válido del IdP (Cognito). Los que operan sobre el perfil propio
  * ({@code /me}) exigen además un rol de la plataforma, que se deriva del dominio del correo: una
  * cuenta de un dominio no autorizado recibe 403 sin llegar a crear perfil.</p>
  */
@@ -85,7 +85,7 @@ public class ControladorUsuarios {
      * Actualiza los datos editables del perfil propio.
      *
      * <p>Solo se pueden cambiar carrera, sede, biografía, teléfono y redes: son los datos que el
-     * login no puede aprovisionar solo. El nombre, el correo, el rol y el identificador de Azure AD
+     * login no puede aprovisionar solo. El nombre, el correo, el rol y el identificador del IdP
      * vienen del token y no son modificables.</p>
      *
      * @param solicitud campos nuevos del perfil, ya validados
@@ -176,17 +176,17 @@ public class ControladorUsuarios {
     }
 
     /**
-     * Devuelve el perfil público a partir del identificador de Azure AD.
+     * Devuelve el perfil público a partir del identificador del IdP.
      *
      * <p>Los demás servicios guardan el {@code oid} del token, no el id interno de este
      * microservicio. Sin esta ruta, un proyecto o una solicitud solo pueden mostrar un
      * identificador opaco en vez del nombre de la persona.</p>
      *
-     * @param oid identificador de la persona en Azure AD
+     * @param oid identificador de la persona en el IdP
      * @return 200 con el perfil público
      */
     @Operation(
-            summary = "Obtiene el perfil público por identificador de Azure AD",
+            summary = "Obtiene el perfil público por identificador del IdP",
             description = "Igual que por id, pero con el oid del token. Es la que usa el BFF para traducir un identificador a un nombre.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Perfil público encontrado"),
@@ -195,7 +195,7 @@ public class ControladorUsuarios {
     })
     @GetMapping("/por-oid/{oid}")
     public ResponseEntity<PerfilPublicoRespuesta> obtenerPerfilPublicoPorOid(
-            @Parameter(description = "Identificador de la persona en Azure AD")
+            @Parameter(description = "Identificador de la persona en el IdP")
             @PathVariable String oid) {
         return ResponseEntity.ok(servicio.buscarPerfilPublicoPorOid(oid));
     }

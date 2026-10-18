@@ -1,6 +1,7 @@
 package cl.duoc.duocconecta.bff.service;
 
 import cl.duoc.duocconecta.bff.dto.Autor;
+import cl.duoc.duocconecta.bff.dto.EstadisticasUsuarios;
 import cl.duoc.duocconecta.bff.dto.PerfilPublicoRespuesta;
 import cl.duoc.duocconecta.bff.dto.PerfilUsuario;
 import cl.duoc.duocconecta.bff.dto.Redes;
@@ -68,5 +69,14 @@ public class ClienteUsuarios {
         } catch (HttpClientErrorException.NotFound ignorada) {
             return Autor.DESCONOCIDO;
         }
+    }
+
+    /** Cifras de la comunidad. ms-usuarios exige ADMINISTRADOR, igual que el BFF. */
+    public EstadisticasUsuarios estadisticas() {
+        return cliente.get()
+                .uri("/api/v1/usuarios/admin/estadisticas")
+                .header(HttpHeaders.AUTHORIZATION, usuarioActual.cabeceraAuthorization())
+                .retrieve()
+                .body(EstadisticasUsuarios.class);
     }
 }

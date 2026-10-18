@@ -130,7 +130,7 @@ public class ServicioUsuarios {
         }
     }
 
-    /** Refresca lo que viene del token, por si cambió en Azure AD. */
+    /** Refresca lo que viene del token, por si cambió en el IdP. */
     private Usuario sincronizar(Usuario existente, UsuarioActual.IdentidadUsuario identidad) {
         existente.sincronizarDesdeToken(identidad.nombre(), identidad.correo(), identidad.rol());
         return existente;

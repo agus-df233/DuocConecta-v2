@@ -24,7 +24,7 @@ public record ColaboracionRespuesta(
         UUID proyectoId,
         @Schema(description = "Nombre del proyecto que originó la solicitud") String proyectoNombre,
         String mensaje,
-        @Schema(description = "PENDIENTE, ACEPTADA o RECHAZADA") String estado,
+        @Schema(description = "PENDIENTE, ACEPTADA, RECHAZADA o RETIRADA") String estado,
         @Schema(description = "Datos de la otra parte. Solo llegan si la solicitud fue aceptada")
         DatosDeContacto contacto,
         // Los dos lados crudos, tal como los devuelve ms-contacto. No salen al frontend.

@@ -6,7 +6,7 @@ spring:
       resourceserver:
         jwt:
           # Se deja en blanco a propósito para tapar el valor de application.yml, que
-          # contiene el placeholder ${AZURE_TENANT_ID} y no se puede resolver aquí.
+          # contiene el placeholder ${OIDC_ISSUER_URI} y no se puede resolver aquí.
           issuer-uri: ""
           # Igual que en ms-usuarios: jwk-set-uri no hace llamadas de red al arrancar.
           jwk-set-uri: http://localhost:0/.well-known/jwks.json

@@ -75,6 +75,24 @@ class ModeracionTests {
     }
 
     @Test
+    @DisplayName("Estadísticas: solo ADMINISTRADOR, y cuentan los ocultos y a la dueña")
+    void estadisticasDeLaVitrina() throws Exception {
+        String id = crearProyecto();
+        mockMvc.perform(patch("/api/v1/proyectos/admin/" + id + "/ocultar").with(administrador(ADMIN))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"motivo\": \"Para contar\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/proyectos/admin/estadisticas").with(estudiante(TERCERO)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/proyectos/admin/estadisticas").with(administrador(ADMIN)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").isNumber())
+                .andExpect(jsonPath("$.ocultosPorModeracion").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.porVisibilidad[?(@.clave == 'PUBLICO')]").isNotEmpty())
+                .andExpect(jsonPath("$.porPropietario[?(@.clave == 'oid-" + DUENA + "')]").isNotEmpty());
+    }
+
+    @Test
     @DisplayName("El administrador conserva su rol de dominio: sigue usando la vitrina")
     void administradorUsaLaVitrina() throws Exception {
         mockMvc.perform(get("/api/v1/proyectos").with(administrador(ADMIN))).andExpect(status().isOk());

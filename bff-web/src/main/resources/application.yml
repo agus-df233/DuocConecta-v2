@@ -31,11 +31,26 @@ duocconecta:
       - name
       - given_name
       - preferred_username
-    claim-roles: roles
 
-    # Vía B para el rol ADMINISTRADOR, si el tenant no permite App Roles: correos separados por
+    # Grupos o roles que vienen en el token: App Roles de Entra ID ('roles') y grupos del user pool
+    # de Cognito ('cognito:groups'). Se suman al rol del dominio, nunca lo reemplazan.
+    claims-roles:
+      - roles
+      - cognito:groups
+
+    # Login con Google: Cognito emite un ID token con su propio emisor y audiencia. Una entrada con
+    # issuer-uri vacío se ignora, así en local sin Cognito todo funciona solo con Microsoft.
+    emisores-adicionales:
+      - issuer-uri: ${COGNITO_ISSUER_URI:}
+        audiencia: ${COGNITO_AUDIENCIA:}
+        # Entra ID no emite email_verified; Cognito sí, y sin verificar no se da rol.
+        exigir-correo-verificado: true
+
+    # Rol ADMINISTRADOR por lista (además del App Role o del grupo ADMINISTRADOR): correos separados por
     # coma. Vacía por defecto; el valor real va en .env o en la task definition, nunca aquí.
     administradores: ${ADMINISTRADORES:}
+    # Cuentas externas (Google) con su rol: correo=ROL separados por coma. Fuera de la lista, 403.
+    correos-permitidos: ${CORREOS_PERMITIDOS:}
     dominios:
       duocuc.cl: ESTUDIANTE
       profesor.duoc.cl: PROFESOR

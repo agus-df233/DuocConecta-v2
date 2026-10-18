@@ -177,7 +177,7 @@ class MsUsuariosApplicationTests {
     }
 
     /**
-     * Arma un token de prueba con los claims que emite Azure AD.
+     * Arma un token de prueba con los claims que emite el IdP.
      *
      * <p>La authority se pone a mano porque el postprocesador {@code jwt()} no pasa por
      * {@code ConversorRolesJwt}. Eso no debilita la prueba: la traducción de dominio a rol ya está

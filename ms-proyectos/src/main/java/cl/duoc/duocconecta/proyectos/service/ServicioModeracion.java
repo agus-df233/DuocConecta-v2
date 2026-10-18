@@ -6,14 +6,21 @@ import cl.duoc.duocconecta.proyectos.domain.Comentario;
 import cl.duoc.duocconecta.proyectos.domain.Proyecto;
 import cl.duoc.duocconecta.proyectos.domain.Visibilidad;
 import cl.duoc.duocconecta.proyectos.dto.ComentarioRespuesta;
+import cl.duoc.duocconecta.proyectos.dto.EstadisticasProyectosRespuesta;
+import cl.duoc.duocconecta.proyectos.dto.EstadisticasProyectosRespuesta.Conteo;
 import cl.duoc.duocconecta.proyectos.dto.ProyectoRespuesta;
 import cl.duoc.duocconecta.proyectos.exception.ConflictoDeEstadoException;
 import cl.duoc.duocconecta.proyectos.exception.RecursoNoEncontradoException;
 import cl.duoc.duocconecta.proyectos.repository.RepositorioComentarios;
 import cl.duoc.duocconecta.proyectos.repository.RepositorioProyectos;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +53,37 @@ public class ServicioModeracion {
                 .filter(p -> visibilidad == null || p.getVisibilidad() == visibilidad)
                 .sorted(Comparator.comparing(Proyecto::getFechaCreacion).reversed())
                 .map(servicioProyectos::aRespuesta)
+                .toList();
+    }
+
+    /** Totales y conteos de la vitrina para el dashboard. Incluye privados, compartidos y ocultos. */
+    @Transactional(readOnly = true)
+    public EstadisticasProyectosRespuesta estadisticas() {
+        List<Proyecto> proyectos = repositorioProyectos.findAll();
+        Instant hace30Dias = Instant.now().minus(Duration.ofDays(30));
+        return new EstadisticasProyectosRespuesta(
+                proyectos.size(),
+                proyectos.stream().filter(p -> p.getVisibilidad() == Visibilidad.PUBLICO && !p.isOculto()).count(),
+                proyectos.stream().filter(Proyecto::isOculto).count(),
+                proyectos.stream().filter(p -> p.getFechaCreacion() != null && p.getFechaCreacion().isAfter(hace30Dias)).count(),
+                repositorioComentarios.count(),
+                contar(proyectos, p -> p.getVisibilidad() == null ? null : p.getVisibilidad().name()),
+                contar(proyectos, p -> p.getEstado() == null ? null : p.getEstado().name()),
+                contar(proyectos, Proyecto::getSede),
+                contar(proyectos, Proyecto::getPropietarioId));
+    }
+
+    /** Agrupa por la clave dada, de mayor a menor. Una clave vacía cuenta como "Sin completar". */
+    private static List<Conteo> contar(List<Proyecto> proyectos, Function<Proyecto, String> clave) {
+        Map<String, Long> conteo = proyectos.stream().collect(Collectors.groupingBy(
+                p -> {
+                    String valor = clave.apply(p);
+                    return valor == null || valor.isBlank() ? "Sin completar" : valor;
+                },
+                Collectors.counting()));
+        return conteo.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
+                .map(e -> new Conteo(e.getKey(), e.getValue()))
                 .toList();
     }
 

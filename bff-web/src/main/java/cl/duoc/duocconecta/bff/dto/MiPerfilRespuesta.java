@@ -20,7 +20,12 @@ public record MiPerfilRespuesta(
 
         @Schema(description = "Indica si el perfil todavía no tiene carrera, sede ni biografía. "
                 + "El frontend lo usa para invitar a completar los datos.")
-        boolean perfilIncompleto) {
+        boolean perfilIncompleto,
+
+        @Schema(description = "Roles efectivos de la sesión: el del dominio más los sumados (grupo del IdP o "
+                + "lista de administradores). El frontend lo usa para mostrar la administración.",
+                example = "[\"ESTUDIANTE\", \"ADMINISTRADOR\"]")
+        List<String> roles) {
 
     /**
      * Arma la respuesta agregada y calcula si el perfil está a medio llenar.
@@ -28,12 +33,13 @@ public record MiPerfilRespuesta(
      * <p>Se considera incompleto cuando falta cualquiera de los tres datos que la vitrina muestra:
      * carrera, sede o biografía.</p>
      */
-    public static MiPerfilRespuesta de(PerfilUsuario perfil, List<String> redes) {
+    public static MiPerfilRespuesta de(PerfilUsuario perfil, List<String> redes, List<String> roles) {
         boolean incompleto = estaVacio(perfil.carrera())
                 || estaVacio(perfil.sede())
                 || estaVacio(perfil.bio());
 
-        return new MiPerfilRespuesta(perfil, redes == null ? List.of() : redes, incompleto);
+        return new MiPerfilRespuesta(perfil, redes == null ? List.of() : redes, incompleto,
+                roles == null ? List.of() : roles);
     }
 
     private static boolean estaVacio(String valor) {

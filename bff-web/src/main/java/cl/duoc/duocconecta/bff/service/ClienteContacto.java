@@ -67,6 +67,15 @@ public class ClienteContacto {
                 .body(ColaboracionRespuesta.class);
     }
 
+    /** Retira una solicitud enviada. Las reglas (solo quien la pidió, solo pendiente) son de ms-contacto. */
+    public ColaboracionRespuesta retirar(UUID id) {
+        return cliente.patch()
+                .uri(RUTA + "/{id}/retirar", id)
+                .header(HttpHeaders.AUTHORIZATION, usuarioActual.cabeceraAuthorization())
+                .retrieve()
+                .body(ColaboracionRespuesta.class);
+    }
+
     /** Map.of no acepta nulos: un dato ausente viaja como cadena vacía. */
     private static String texto(String valor) {
         return valor == null ? "" : valor;

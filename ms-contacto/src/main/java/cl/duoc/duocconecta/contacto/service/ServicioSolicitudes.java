@@ -108,6 +108,31 @@ public class ServicioSolicitudes {
         return SolicitudRespuesta.desdeEntidad(guardada);
     }
 
+    /**
+     * Solo la retira quien la pidió, y solo mientras siga pendiente: una vez respondida, la otra
+     * persona ya decidió. Retirar libera el cupo para volver a pedir por el mismo proyecto.
+     */
+    @Transactional
+    public SolicitudRespuesta retirar(UUID id, String usuarioId) {
+        SolicitudContacto solicitud = repositorioSolicitudes.findById(id)
+                .orElseThrow(() -> new RecursoNoEncontradoException("Solicitud no encontrada: " + id));
+
+        if (!solicitud.getSolicitanteId().equals(usuarioId)) {
+            throw new OperacionNoPermitidaException("Solo quien envió la solicitud puede retirarla");
+        }
+        if (solicitud.getEstado() != EstadoSolicitud.PENDIENTE) {
+            throw new ConflictoDeEstadoException("Esta solicitud ya fue respondida y no se puede retirar");
+        }
+
+        solicitud.setEstado(EstadoSolicitud.RETIRADA);
+        solicitud.setFechaRespuesta(Instant.now());
+        SolicitudContacto guardada = repositorioSolicitudes.save(solicitud);
+        eventos.publishEvent(EventoDuocConecta.nuevo(TiposDeEvento.COLABORACION_RETIRADA,
+                usuarioId, guardada.getSolicitadoId(), guardada.getId().toString(),
+                textoONulo(guardada.getProyectoId()), null));
+        return SolicitudRespuesta.desdeEntidad(guardada);
+    }
+
     private static String textoONulo(UUID id) {
         return id == null ? null : id.toString();
     }

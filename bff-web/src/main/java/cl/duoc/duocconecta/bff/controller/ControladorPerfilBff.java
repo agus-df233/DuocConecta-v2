@@ -2,14 +2,19 @@ package cl.duoc.duocconecta.bff.controller;
 
 import cl.duoc.duocconecta.bff.dto.MiPerfilRespuesta;
 import cl.duoc.duocconecta.bff.service.ClienteUsuarios;
+import cl.duoc.duocconecta.comun.seguridad.Rol;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -54,6 +59,23 @@ public class ControladorPerfilBff {
     public ResponseEntity<MiPerfilRespuesta> obtenerMiPerfil() {
         return ResponseEntity.ok(MiPerfilRespuesta.de(
                 clienteUsuarios.obtenerPerfilPropio(),
-                clienteUsuarios.obtenerRedesPropias()));
+                clienteUsuarios.obtenerRedesPropias(),
+                rolesDeLaSesion()));
+    }
+
+    /**
+     * Los roles que el BFF ya calculó al validar el token. Se leen de aquí y no del token en el
+     * navegador porque la lista de administradores solo existe en el backend.
+     */
+    private static List<String> rolesDeLaSesion() {
+        Authentication autenticacion = SecurityContextHolder.getContext().getAuthentication();
+        if (autenticacion == null) {
+            return List.of();
+        }
+        return autenticacion.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .filter(authority -> authority.startsWith(Rol.PREFIJO_AUTHORITY))
+                .map(authority -> authority.substring(Rol.PREFIJO_AUTHORITY.length()))
+                .toList();
     }
 }

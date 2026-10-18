@@ -18,7 +18,7 @@ import org.springframework.security.web.access.AccessDeniedHandler;
 /**
  * Seguridad de ms-usuarios.
  *
- * <p>Es un OAuth2 Resource Server: valida el JWT de Azure AD por su cuenta, aunque el BFF y el
+ * <p>Es un OAuth2 Resource Server: valida el JWT del IdP (Cognito) por su cuenta, aunque el BFF y el
  * API Manager ya lo hayan validado antes. Defensa en profundidad: quien llegue salteándose
  * las capas de adelante igual necesita un token válido.</p>
  */

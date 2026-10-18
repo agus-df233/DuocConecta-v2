@@ -38,7 +38,7 @@ public class Comentario {
     @Column(name = "proyecto_id", nullable = false)
     private UUID proyectoId;
 
-    /** Identificador en Azure AD (claim oid) de quien comentó. */
+    /** Identificador en el IdP (claim sub) de quien comentó. */
     @Column(name = "autor_id", nullable = false, length = 100)
     private String autorId;
 

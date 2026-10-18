@@ -6,7 +6,7 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 
 /**
- * Traduce identificadores de Azure AD a personas que se puedan mostrar.
+ * Traduce identificadores del IdP a personas que se puedan mostrar.
  *
  * <p>Consulta a ms-usuarios una vez por persona y no una por fila: en una vitrina, la diferencia
  * entre una llamada y treinta.</p>

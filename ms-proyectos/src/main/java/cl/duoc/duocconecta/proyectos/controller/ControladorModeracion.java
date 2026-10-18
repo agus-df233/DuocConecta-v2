@@ -4,6 +4,7 @@ import cl.duoc.duocconecta.comun.seguridad.ReglasDeAcceso;
 import cl.duoc.duocconecta.comun.seguridad.UsuarioActual;
 import cl.duoc.duocconecta.proyectos.domain.Visibilidad;
 import cl.duoc.duocconecta.proyectos.dto.ComentarioRespuesta;
+import cl.duoc.duocconecta.proyectos.dto.EstadisticasProyectosRespuesta;
 import cl.duoc.duocconecta.proyectos.dto.OcultarProyectoDatos;
 import cl.duoc.duocconecta.proyectos.dto.ProyectoRespuesta;
 import cl.duoc.duocconecta.proyectos.service.ServicioModeracion;
@@ -52,6 +53,17 @@ public class ControladorModeracion {
     /** Identificador del administrador, tomado del token. */
     private String administrador() {
         return usuarioActual.obtener().oid();
+    }
+
+    /** Cifras de la vitrina para el dashboard: totales, ocultos, por visibilidad, estado, sede y dueña. */
+    @Operation(summary = "Estadísticas de la vitrina")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Cifras calculadas"),
+            @ApiResponse(responseCode = "403", description = "Sin rol ADMINISTRADOR", content = @Content)
+    })
+    @GetMapping("/estadisticas")
+    public EstadisticasProyectosRespuesta estadisticas() {
+        return servicio.estadisticas();
     }
 
     /** Todos los proyectos, incluidos privados, compartidos y ocultos. */

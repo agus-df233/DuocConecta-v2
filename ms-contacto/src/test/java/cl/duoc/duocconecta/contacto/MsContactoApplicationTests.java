@@ -245,7 +245,7 @@ class MsContactoApplicationTests {
     }
 
     /**
-     * Arma un token de prueba con los claims que emite Azure AD.
+     * Arma un token de prueba con los claims que emite el IdP.
      *
      * <p>La authority se pone a mano porque el postprocesador {@code jwt()} no pasa por el
      * conversor de roles. El servicio igual vuelve a validar el dominio del correo, así que un
