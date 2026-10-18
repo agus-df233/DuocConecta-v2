@@ -6,7 +6,7 @@ import java.io.Serial;
  * Se lanza cuando el correo del token no pertenece a ningún dominio institucional autorizado.
  *
  * <p>Es el caso de una cuenta externa (por ejemplo {@code @gmail.com}) que logró autenticarse
- * contra el tenant pero no debe tener perfil en la plataforma. Se traduce a un HTTP 403.</p>
+ * contra el IdP pero no debe tener perfil en la plataforma. Se traduce a un HTTP 403.</p>
  */
 public class DominioNoPermitidoException extends RuntimeException {
 

@@ -36,28 +36,28 @@ class ConversorRolesJwtTest {
     }
 
     @Test
-    @DisplayName("Sin App Roles ni lista: solo el rol del dominio")
+    @DisplayName("Sin grupos ni lista: solo el rol del dominio")
     void soloRolDeDominio() {
         assertThat(authorities(conversor(List.of()), token("ana@duocuc.cl", null)))
                 .containsExactly("ROLE_ESTUDIANTE");
     }
 
     @Test
-    @DisplayName("El App Role ADMINISTRADOR se suma al rol del dominio")
+    @DisplayName("El grupo ADMINISTRADOR se suma al rol del dominio")
     void appRoleSeSuma() {
         assertThat(authorities(conversor(List.of()), token("ana@duocuc.cl", List.of("ADMINISTRADOR"))))
                 .containsExactly("ROLE_ESTUDIANTE", "ROLE_ADMINISTRADOR");
     }
 
     @Test
-    @DisplayName("El valor del App Role no distingue mayúsculas")
+    @DisplayName("El nombre del grupo no distingue mayúsculas")
     void appRoleSinDistinguirMayusculas() {
         assertThat(authorities(conversor(List.of()), token("ana@duocuc.cl", "administrador")))
                 .contains("ROLE_ADMINISTRADOR");
     }
 
     @Test
-    @DisplayName("Un App Role desconocido se ignora")
+    @DisplayName("Un grupo desconocido se ignora")
     void appRoleDesconocido() {
         assertThat(authorities(conversor(List.of()), token("ana@duocuc.cl", List.of("SUPERUSUARIO"))))
                 .containsExactly("ROLE_ESTUDIANTE");
@@ -78,7 +78,7 @@ class ConversorRolesJwtTest {
     }
 
     @Test
-    @DisplayName("Un dominio no autorizado queda sin roles, aunque traiga App Role o esté en la lista")
+    @DisplayName("Un dominio no autorizado queda sin roles, aunque traiga el grupo o esté en la lista")
     void dominioNoAutorizadoNoSeRescata() {
         ConversorRolesJwt conversor = conversor(List.of("alguien@gmail.com"));
         assertThat(authorities(conversor, token("alguien@gmail.com", List.of("ADMINISTRADOR", "PROFESOR"))))

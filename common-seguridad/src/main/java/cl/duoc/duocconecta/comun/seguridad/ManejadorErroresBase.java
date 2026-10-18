@@ -35,13 +35,13 @@ public abstract class ManejadorErroresBase {
                         + "Entra con tu cuenta @duocuc.cl, @profesor.duoc.cl o @duoc.cl.");
     }
 
-    /** Token válido sin el claim del correo: es configuración del tenant, no del usuario. */
+    /** Token válido sin el claim del correo: es configuración del cliente o del IdP, no del usuario. */
     @ExceptionHandler(CorreoNoPresenteException.class)
     public ProblemDetail manejarCorreoAusente(CorreoNoPresenteException excepcion) {
         log.error("Token sin claim de correo: {}", excepcion.getMessage());
         return problema(HttpStatus.FORBIDDEN, "No se pudo determinar tu correo institucional",
                 "El token no incluye tu correo, así que no se puede asignar un rol. "
-                        + "Avisa al equipo: faltan los claims opcionales del access token en Azure AD.");
+                        + "Avisa al equipo: el token no trae el correo.");
     }
 
     /** Datos inválidos: se devuelve campo por campo para que el formulario los marque. */

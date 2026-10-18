@@ -22,7 +22,7 @@ public final class DocumentacionApi {
     /** Lo que vale para todos: de dónde sale el token y cómo se deriva el rol. */
     private static final String COMUN = """
 
-            Todos los endpoints requieren un token JWT emitido por Azure AD (Microsoft Entra ID).
+            Todos los endpoints requieren un JWT: el access token de Microsoft Entra ID (login con Microsoft) o el ID token de Amazon Cognito (login con Google).
             El rol se deriva del dominio del correo institucional: @duocuc.cl es ESTUDIANTE,
             @profesor.duoc.cl es PROFESOR y @duoc.cl es ACADEMICO. Cualquier otro dominio recibe 403.
 
@@ -44,6 +44,6 @@ public final class DocumentacionApi {
                                 .type(SecurityScheme.Type.HTTP)
                                 .scheme("bearer")
                                 .bearerFormat("JWT")
-                                .description("Access token emitido por Azure AD para esta API.")));
+                                .description("Access token de Entra ID o ID token de Cognito (login con Google).")));
     }
 }

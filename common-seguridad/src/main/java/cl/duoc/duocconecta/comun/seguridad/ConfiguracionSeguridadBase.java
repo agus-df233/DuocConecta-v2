@@ -1,5 +1,9 @@
 package cl.duoc.duocconecta.comun.seguridad;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -27,7 +31,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 public class ConfiguracionSeguridadBase {
 
     /**
-     * URL del emisor del tenant de Azure AD. De aquí se descubre la ubicación de las claves
+     * URL del emisor principal (Microsoft Entra ID). De aquí se descubre la ubicación de las claves
      * públicas con las que se verifica la firma de los tokens.
      */
     @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri:}")
@@ -43,7 +47,7 @@ public class ConfiguracionSeguridadBase {
         return new ResolvedorRol(propiedades);
     }
 
-    /** Lee oid, correo, nombre y App Roles desde el token. */
+    /** Lee oid, correo, nombre y grupos desde el token. */
     @Bean
     public ClaimsDelToken claimsDelToken(PropiedadesSeguridad propiedades) {
         return new ClaimsDelToken(propiedades);
@@ -69,14 +73,43 @@ public class ConfiguracionSeguridadBase {
      * {@link ValidadorAudiencia}, que comprueba que el token haya sido emitido para esta API.</p>
      *
      * <p>Cuando hay {@code issuer-uri} se usa el descubrimiento OIDC, que consulta el endpoint de
-     * metadatos del tenant al arrancar. Cuando solo hay {@code jwk-set-uri} se construye el
+     * metadatos del emisor al arrancar. Cuando solo hay {@code jwk-set-uri} se construye el
      * decodificador directo, sin llamadas de red en el arranque: es lo que usan los tests.</p>
      */
     @Bean
     public JwtDecoder jwtDecoder(PropiedadesSeguridad propiedades) {
+        List<PropiedadesSeguridad.Emisor> adicionales = propiedades.emisoresAdicionalesConfigurados();
+        if (!adicionales.isEmpty() && issuerUri != null && !issuerUri.isBlank()) {
+            return decodificadorMultiEmisor(propiedades, adicionales);
+        }
         NimbusJwtDecoder decodificador = construirDecodificador();
-        decodificador.setJwtValidator(validadores(propiedades));
+        decodificador.setJwtValidator(validadores(issuerUri, propiedades.getAudiencia()));
         return decodificador;
+    }
+
+    /**
+     * Entra ID (login con Microsoft) más los emisores adicionales (Cognito, login con Google). Cada
+     * uno con su propia audiencia. La configuración se revisa al arrancar; las claves se piden
+     * recién con el primer token de cada emisor.
+     */
+    private JwtDecoder decodificadorMultiEmisor(PropiedadesSeguridad propiedades,
+                                                List<PropiedadesSeguridad.Emisor> adicionales) {
+        Map<String, Supplier<JwtDecoder>> fabricas = new LinkedHashMap<>();
+        fabricas.put(DecodificadorMultiEmisor.sinBarraFinal(issuerUri), fabrica(issuerUri, propiedades.getAudiencia()));
+        for (PropiedadesSeguridad.Emisor emisor : adicionales) {
+            fabricas.put(DecodificadorMultiEmisor.sinBarraFinal(emisor.getIssuerUri()),
+                    fabrica(emisor.getIssuerUri(), emisor.getAudiencia()));
+        }
+        return new DecodificadorMultiEmisor(fabricas);
+    }
+
+    private Supplier<JwtDecoder> fabrica(String emisor, String audiencia) {
+        OAuth2TokenValidator<Jwt> validacion = validadores(emisor, audiencia);   // falla al arrancar si falta la audiencia
+        return () -> {
+            NimbusJwtDecoder decodificador = (NimbusJwtDecoder) JwtDecoders.fromIssuerLocation(emisor);
+            decodificador.setJwtValidator(validacion);
+            return decodificador;
+        };
     }
 
     /**
@@ -90,23 +123,22 @@ public class ConfiguracionSeguridadBase {
             return NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
         }
         throw new IllegalStateException(
-                "Falta configurar la validación del token. Definí AZURE_TENANT_ID para que se arme "
+                "Falta configurar la validación del token. Define AZURE_TENANT_ID para que se arme "
                         + "spring.security.oauth2.resourceserver.jwt.issuer-uri, o bien un jwk-set-uri.");
     }
 
     /**
      * Encadena las validaciones estándar del emisor con la de audiencia propia.
      */
-    private OAuth2TokenValidator<Jwt> validadores(PropiedadesSeguridad propiedades) {
-        OAuth2TokenValidator<Jwt> porDefecto = (issuerUri != null && !issuerUri.isBlank())
-                ? JwtValidators.createDefaultWithIssuer(issuerUri)
+    private static OAuth2TokenValidator<Jwt> validadores(String emisor, String audiencia) {
+        OAuth2TokenValidator<Jwt> porDefecto = (emisor != null && !emisor.isBlank())
+                ? JwtValidators.createDefaultWithIssuer(emisor)
                 : JwtValidators.createDefault();
 
-        String audiencia = propiedades.getAudiencia();
         if (audiencia == null || audiencia.isBlank()) {
             throw new IllegalStateException(
-                    "Falta duocconecta.seguridad.audiencia (variable AZURE_CLIENT_ID). Sin ella se "
-                            + "aceptaría cualquier token del tenant, aunque fuera de otra aplicación.");
+                    "Falta la audiencia del emisor " + emisor + " (AZURE_CLIENT_ID o COGNITO_AUDIENCIA). "
+                            + "Sin ella se aceptaría cualquier token de ese IdP, aunque fuera de otra aplicación.");
         }
 
         return new DelegatingOAuth2TokenValidator<>(porDefecto, new ValidadorAudiencia(audiencia));

@@ -1,6 +1,6 @@
 package cl.duoc.duocconecta.comun.seguridad;
 
-/** Roles de la plataforma. Salen del dominio del correo o de los App Roles. Ver {@link ResolvedorRol}. */
+/** Roles de la plataforma. Salen del dominio del correo o de los grupos del IdP. Ver {@link ResolvedorRol}. */
 public enum Rol {
 
     /** {@code @duocuc.cl} */
@@ -13,7 +13,7 @@ public enum Rol {
     ACADEMICO,
 
     /**
-     * Modera la plataforma. No sale de un dominio: se suma al rol del dominio por App Role o por
+     * Modera la plataforma. No sale de un dominio: se suma al rol del dominio por grupo del IdP o por
      * la lista {@code duocconecta.seguridad.administradores}. Ver {@link ConversorRolesJwt}.
      */
     ADMINISTRADOR;

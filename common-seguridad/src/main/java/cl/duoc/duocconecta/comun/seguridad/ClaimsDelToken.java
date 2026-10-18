@@ -8,7 +8,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 /**
  * Lee los datos del usuario desde el JWT.
  *
- * <p>Azure AD emite claims distintos según el tipo de cuenta, así que se prueba una cadena de
+ * <p>Cada IdP emite claims distintos según el tipo de cuenta, así que se prueba una cadena de
  * alternativas configurable. Nadie más necesita saber en qué claim viene cada dato.</p>
  */
 public class ClaimsDelToken {
@@ -38,9 +38,18 @@ public class ClaimsDelToken {
                         .orElse("Usuario sin nombre"));
     }
 
-    /** Puede venir vacío; entonces el rol sale del dominio del correo. */
+    /**
+     * Los roles o grupos de todos los claims configurados, sumados. Puede venir vacío; entonces el
+     * rol sale del dominio del correo.
+     */
     public List<String> rolesDelToken(Jwt token) {
-        Object valor = token.getClaim(propiedades.getClaimRoles());
+        List<String> claims = propiedades.getClaimsRoles().isEmpty()
+                ? List.of(propiedades.getClaimRoles())
+                : propiedades.getClaimsRoles();
+        return claims.stream().flatMap(claim -> valoresDe(token.getClaim(claim)).stream()).toList();
+    }
+
+    private static List<String> valoresDe(Object valor) {
         if (valor instanceof Collection<?> coleccion) {
             return coleccion.stream()
                     .filter(String.class::isInstance)
@@ -48,7 +57,7 @@ public class ClaimsDelToken {
                     .filter(rol -> !rol.isBlank())
                     .toList();
         }
-        // Algunos tenants emiten un único rol como texto plano en vez de una lista.
+        // Algunos IdP emiten un único rol como texto plano en vez de una lista.
         if (valor instanceof String texto && !texto.isBlank()) {
             return List.of(texto);
         }
