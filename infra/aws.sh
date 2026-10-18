@@ -649,15 +649,20 @@ cmd_front() {
   aws s3 cp "s3://$bucket/index.html" "s3://$bucket/index.html" --metadata-directive REPLACE \
     --content-type "text/html; charset=utf-8" --cache-control "no-cache, must-revalidate" \
     --only-show-errors
-  # El tipo de contenido se repite porque REPLACE borra TODA la metadata: sin esto los .js y .css
-  # quedan como binary/octet-stream y el navegador los rechaza, con la página en blanco de síntoma.
-  aws s3 cp "s3://$bucket/assets/" "s3://$bucket/assets/" --recursive --exclude "*" --include "*.js" \
-    --metadata-directive REPLACE --content-type "text/javascript; charset=utf-8" \
-    --cache-control "public, max-age=31536000, immutable" --only-show-errors
-  aws s3 cp "s3://$bucket/assets/" "s3://$bucket/assets/" --recursive --exclude "*" --include "*.css" \
-    --metadata-directive REPLACE --content-type "text/css; charset=utf-8" \
-    --cache-control "public, max-age=31536000, immutable" --only-show-errors
-  ok "subido, con tipos de contenido y caché correctos"
+  # JS y CSS se suben comprimidos con gzip: ni S3 ni el API Gateway comprimen, y el JS pesa más
+  # de 600 KB sin comprimir (unos 170 KB con gzip). Todo navegador acepta gzip.
+  # El tipo de contenido va explícito: sin él quedan como binary/octet-stream y el navegador los
+  # rechaza, con la página en blanco de síntoma.
+  local archivo tipo comprimido; comprimido=$(mktemp)
+  for archivo in "$RAIZ"/frontend-web/dist/assets/*.js "$RAIZ"/frontend-web/dist/assets/*.css; do
+    [[ -f "$archivo" ]] || continue
+    case "$archivo" in *.js) tipo="text/javascript; charset=utf-8" ;; *) tipo="text/css; charset=utf-8" ;; esac
+    gzip -9 -n -c "$archivo" > "$comprimido"
+    aws s3 cp "$comprimido" "s3://$bucket/assets/$(basename "$archivo")" --content-encoding gzip \
+      --content-type "$tipo" --cache-control "public, max-age=31536000, immutable" --only-show-errors
+  done
+  rm -f "$comprimido"
+  ok "subido: JS y CSS con gzip, tipos de contenido y caché correctos"
 
   azul "4/4 · Configurando el API Gateway"
   cmd_apigw
@@ -719,11 +724,12 @@ cmd_apigw() {
   if aws lambda get-function --function-name "$fn_nombre" >/dev/null 2>&1; then
     aws lambda update-function-code --function-name "$fn_nombre" --zip-file "fileb://$zip" >/dev/null
     aws lambda wait function-updated --function-name "$fn_nombre"
-    aws lambda update-function-configuration --function-name "$fn_nombre" --environment "$entorno" >/dev/null
+    aws lambda update-function-configuration --function-name "$fn_nombre" --environment "$entorno" \
+      --memory-size 512 >/dev/null
     aws lambda wait function-updated --function-name "$fn_nombre"
   else
     aws lambda create-function --function-name "$fn_nombre" --runtime nodejs20.x --handler index.handler \
-      --role "arn:aws:iam::$acc:role/LabRole" --zip-file "fileb://$zip" --timeout 10 --memory-size 256 \
+      --role "arn:aws:iam::$acc:role/LabRole" --zip-file "fileb://$zip" --timeout 10 --memory-size 512 \
       --environment "$entorno" >/dev/null \
       || { falla "El laboratorio no permitió crear la Lambda (ver plan B en docs/guia-cognito-google.md)"; exit 1; }
     aws lambda wait function-active-v2 --function-name "$fn_nombre"
@@ -743,12 +749,15 @@ cmd_apigw() {
     auth_id=$(aws apigatewayv2 create-authorizer --api-id "$API_ID" --name "$auth_lambda" \
       --authorizer-type REQUEST --authorizer-uri "$uri" \
       --authorizer-payload-format-version 2.0 --enable-simple-responses \
-      --identity-source '$request.header.Authorization' --authorizer-result-ttl-in-seconds 300 \
+      --identity-source '$request.header.Authorization' --authorizer-result-ttl-in-seconds 3600 \
       --query AuthorizerId --output text)
   else
     aws apigatewayv2 update-authorizer --api-id "$API_ID" --authorizer-id "$auth_id" \
-      --authorizer-uri "$uri" >/dev/null
+      --authorizer-uri "$uri" --authorizer-result-ttl-in-seconds 3600 >/dev/null
   fi
+  # Caché de una hora, lo que dura un token: la Lambda corre una vez por token y no cada 5 minutos,
+  # y cada arranque en frío le sumaba más de un segundo a una petición. El backend igual valida la
+  # vigencia en cada llamada, así que un token vencido sigue recibiendo 401.
   ok "autorizador '$auth_lambda' (Lambda): Entra ID + Cognito"
 
   # --- Rutas ----------------------------------------------------------------

@@ -21,15 +21,33 @@ const clavesPorEmisor = new Map() // iss -> { kid -> KeyObject }, vive mientras 
 /** Decodifica una parte base64url del JWT. */
 const parte = (texto) => JSON.parse(Buffer.from(texto, 'base64url').toString('utf8'))
 
-/** Las claves públicas del emisor, descubiertas por OIDC y guardadas en memoria. */
+/**
+ * Dónde publica sus claves cada emisor. Entra ID y Cognito tienen rutas conocidas: armarlas aquí
+ * ahorra el viaje al documento de descubrimiento OIDC, que en un arranque en frío sumaba cientos
+ * de milisegundos. Para otro emisor se usa el descubrimiento.
+ */
+async function urlDeClaves(iss) {
+  if (/^https:\/\/login\.microsoftonline\.com\/[^/]+\/v2\.0$/.test(iss)) {
+    return iss.replace(/\/v2\.0$/, '/discovery/v2.0/keys')
+  }
+  if (/^https:\/\/cognito-idp\.[a-z0-9-]+\.amazonaws\.com\/[^/]+$/.test(iss)) {
+    return `${iss}/.well-known/jwks.json`
+  }
+  return (await (await fetch(`${iss}/.well-known/openid-configuration`)).json()).jwks_uri
+}
+
+/** Las claves públicas del emisor, guardadas en memoria. */
 async function claves(iss, refrescar = false) {
   if (!refrescar && clavesPorEmisor.has(iss)) return clavesPorEmisor.get(iss)
-  const config = await (await fetch(`${iss}/.well-known/openid-configuration`)).json()
-  const { keys } = await (await fetch(config.jwks_uri)).json()
+  const { keys } = await (await fetch(await urlDeClaves(iss))).json()
   const mapa = new Map(keys.filter((k) => k.kty === 'RSA').map((k) => [k.kid, createPublicKey({ key: k, format: 'jwk' })]))
   clavesPorEmisor.set(iss, mapa)
   return mapa
 }
+
+// Se piden las claves de todos los emisores en paralelo durante el arranque del contenedor, y no
+// una tras otra en la primera petición. Si falla, no se corta: validar() las vuelve a pedir.
+await Promise.allSettled(EMISORES.map((e) => claves(e.iss)))
 
 /** Devuelve el emisor si el token es válido; si no, lanza un error con el motivo. */
 export async function validar(token) {

@@ -522,6 +522,17 @@ token o de permisos. El síntoma que lo delata es que **los GET funcionan y solo
 
 **Ante un 403 sin rastro, lo primero es mirar el cuerpo de la respuesta**, no los registros.
 
+**La tercera trampa: un bucle en el front que parece un backend lento.** MSAL emite
+`ACQUIRE_TOKEN_SUCCESS` en cada token, incluso de caché, con un objeto de cuenta nuevo. Un efecto
+que dependía de ese objeto pedía `mi-perfil`, que pedía un token, que cambiaba la cuenta… Llegó a
+~500 peticiones por segundo, el BFF pasó de p50 4 ms a 322 ms y la CPU de la tarea a más de 100%.
+`App.jsx` solo reemplaza la cuenta si cambia el correo. **Si la app se pone lenta, lo primero es
+contar peticiones por ruta en los logs de acceso del API Gateway** (`/aws/apigateway/duocconecta`).
+
+Para que la demo se vea fluida: el JS y el CSS se suben con gzip (S3 y el API Gateway no
+comprimen: 627 KB → 172 KB), y el autorizador Lambda cachea el resultado 1 hora, arma la URL del
+JWKS sin pasar por el descubrimiento OIDC y precarga las claves al arrancar.
+
 ### Cómo se sigue una petición
 
 Todos los contenedores escriben al **mismo** grupo de CloudWatch (`/ecs/duocconecta`), cada uno en
