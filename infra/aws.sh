@@ -14,6 +14,8 @@
 #   ./infra/aws.sh apagar      Baja la tarea a cero. IMPORTANTE: correrlo al terminar de trabajar.
 #   ./infra/aws.sh urls        Muestra las URLs del ALB y del API Gateway.
 #   ./infra/aws.sh mensajeria  Crea lo que falte del tópico SNS, las colas SQS y sus DLQ (EP2). Idempotente.
+#   ./infra/aws.sh cognito     Login con Google: user pool, dominio, app client y Google como IdP. Idempotente.
+#   ./infra/aws.sh rabbitmq    RabbitMQ en una EC2: clúster de 2 nodos con docker-compose. Idempotente.
 #
 # Las credenciales del lab van en ~/.aws/credentials (panel "AWS Details"), nunca en el repo:
 # rotan en cada sesión.
@@ -27,6 +29,16 @@ SERVICIO_ECS="$PROYECTO"
 FAMILIA="$PROYECTO"
 SERVICIOS=(ms-usuarios bff-web ms-proyectos ms-contacto ms-notificaciones ms-mensajeria)
 
+# Servicios que corren en su propia tarea y su propio servicio de ECS. ECS admite como máximo
+# 5 target groups por servicio y ya son 6. ms-mensajeria puede ir aparte porque no usa la base
+# ni llama a los demás por localhost: solo habla con SQS y SNS.
+SERVICIOS_APARTE=(ms-mensajeria)
+
+es_aparte() { local a; for a in "${SERVICIOS_APARTE[@]}"; do [[ "$a" == "$1" ]] && return 0; done; return 1; }
+
+# Los servicios de ECS que hay que encender y apagar: el principal y uno por cada servicio aparte.
+servicios_ecs() { echo "$SERVICIO_ECS"; local a; for a in "${SERVICIOS_APARTE[@]}"; do echo "$SERVICIO_ECS-$a"; done; }
+
 # Etiqueta de imagen de la v2. No es "latest" a propósito: así las imágenes de la EP1 siguen en
 # ECR sin pisarse, y su task definition anterior sirve para volver atrás.
 TAG="${TAG:-ep2}"
@@ -35,7 +47,7 @@ TAG="${TAG:-ep2}"
 # quien mire la consola de AWS entienda de una qué papel cumple cada recurso: la evaluación
 # pide mostrar "la instancia de API Manager", así que se llama así y no con una sigla.
 API_NOMBRE="$PROYECTO-api-manager"
-AUTH_NOMBRE="validador-jwt-entra-id"
+AUTH_NOMBRE="validador-jwt-entra-id"   # el autorizador de un solo emisor, que se retira
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Puerto y ruta de cada servicio. Se resuelven con funciones y no con arreglos asociativos
@@ -68,11 +80,80 @@ ok()    { printf '  \033[32m✓\033[0m %s\n' "$*"; }
 falla() { printf '  \033[31m✗\033[0m %s\n' "$*"; }
 aviso() { printf '  \033[33m!\033[0m %s\n' "$*"; }
 
-# Carga .env si existe, para tomar los identificadores de Azure sin pedirlos cada vez.
+# Carga .env si existe, para tomar la configuración local sin pedirla cada vez.
 [[ -f "$RAIZ/.env" ]] && set -a && source "$RAIZ/.env" && set +a
 
 cuenta() { aws sts get-caller-identity --query Account --output text; }
+
+# Datos de Cognito (login con Google). Opcionales: sin user pool, la plataforma funciona solo
+# con Microsoft. No son secretos: el emisor y el client id viajan dentro de cada token.
+POOL_NOMBRE="$PROYECTO-usuarios"
+CLIENTE_NOMBRE="$PROYECTO-web"
+datos_cognito() {
+  local pool cliente
+  pool="${COGNITO_POOL_ID:-}"
+  [[ -z "$pool" ]] && pool=$(aws cognito-idp list-user-pools --max-results 60 --output json 2>/dev/null \
+    | jq -r --arg n "$POOL_NOMBRE" '.UserPools[] | select(.Name==$n) | .Id' | head -1)
+  if [[ -z "$pool" ]]; then
+    COGNITO_ISSUER_URI=""; COGNITO_AUDIENCIA=""; COGNITO_DOMINIO=""
+    aviso "Sin user pool de Cognito: solo login con Microsoft (corre 'aws.sh cognito' para Google)"
+    return 0
+  fi
+  cliente="${COGNITO_CLIENT_ID:-}"
+  [[ -z "$cliente" ]] && cliente=$(aws cognito-idp list-user-pool-clients --user-pool-id "$pool" --output json \
+    | jq -r --arg n "$CLIENTE_NOMBRE" '.UserPoolClients[] | select(.ClientName==$n) | .ClientId' | head -1)
+  COGNITO_POOL_ID="$pool"
+  COGNITO_AUDIENCIA="$cliente"
+  COGNITO_DOMINIO="${COGNITO_DOMINIO:-$PROYECTO-$(cuenta).auth.$REGION.amazoncognito.com}"
+  # El emisor tiene que coincidir EXACTO con el claim 'iss' del token, sin barra final.
+  COGNITO_ISSUER_URI="https://cognito-idp.$REGION.amazonaws.com/$pool"
+}
+
+# RabbitMQ en la nube: una EC2 con el clúster de 2 nodos en docker-compose (Amazon MQ no está
+# habilitado en el lab). Sin la EC2, la plataforma funciona solo con SNS/SQS.
+RABBIT_NOMBRE="$PROYECTO-rabbitmq"
+# Versión fija de docker compose en la EC2: con "latest", dos despliegues podían terminar distintos.
+COMPOSE_VERSION="v2.29.7"
+RABBIT_SECRETO="$PROYECTO/rabbitmq"
+id_ec2_rabbit() {
+  aws ec2 describe-instances --filters "Name=tag:Name,Values=$RABBIT_NOMBRE" \
+    "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+    --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null | awk '{print $1}'
+}
+datos_rabbit() {
+  local id; id=$(id_ec2_rabbit)
+  # Sin EC2 queda deshabilitado; la dirección es solo para que Spring tenga un valor que leer.
+  RABBITMQ_HABILITADA=false; RABBITMQ_ADDRESSES="localhost:5672"; SECRETO_RABBIT_ARN=""
+  if [[ -z "$id" ]]; then
+    aviso "Sin EC2 de RabbitMQ: solo SNS/SQS (corre 'aws.sh rabbitmq' para el segundo broker)"
+    return 0
+  fi
+  local ip; ip=$(aws ec2 describe-instances --instance-ids "$id" --query 'Reservations[0].Instances[0].PrivateIpAddress' --output text)
+  SECRETO_RABBIT_ARN=$(aws secretsmanager describe-secret --secret-id "$RABBIT_SECRETO" --query ARN --output text)
+  RABBITMQ_ADDRESSES="$ip:5672,$ip:5673"
+  RABBITMQ_HABILITADA=true
+}
+
+exigir_azure() {
+  [[ -z "${AZURE_TENANT_ID:-}" || -z "${AZURE_CLIENT_ID:-}" ]] && {
+    falla "Faltan AZURE_TENANT_ID o AZURE_CLIENT_ID (login con Microsoft). Copia .env.example a .env y complétalos."
+    exit 1
+  }
+  return 0
+}
 registro() { echo "$(cuenta).dkr.ecr.$REGION.amazonaws.com"; }
+
+# Guarda CLAVE=VALOR en infra/.recursos: reemplaza la línea si ya está y la agrega si falta. Antes
+# 'crear' reescribía el archivo entero y se perdían el bucket de adjuntos, Cognito y el sitio web.
+guardar_recurso() { # $1 = clave, $2 = valor
+  local archivo="$RAIZ/infra/.recursos"
+  touch "$archivo"
+  if grep -q "^$1=" "$archivo"; then
+    sed -i '' "s|^$1=.*|$1=$2|" "$archivo"
+  else
+    echo "$1=$2" >> "$archivo"
+  fi
+}
 
 # ---------------------------------------------------------------------------
 # verificar — qué permite realmente el lab. Correr esto antes que nada.
@@ -102,10 +183,23 @@ cmd_verificar() {
   probar "CloudWatch Logs" aws logs describe-log-groups --limit 1
   probar "SNS (EP2)"       aws sns list-topics
   probar "SQS (EP2)"       aws sqs list-queues --max-results 1
+  probar "EC2 (RabbitMQ)"  aws ec2 describe-instances --max-items 1
+  probar "SSM (entrar a la EC2)" aws ssm describe-instance-information --max-items 1
+  probar "Lambda (autorizador)"  aws lambda list-functions --max-items 1
+  probar "Cognito (Google)" aws cognito-idp list-user-pools --max-results 1
+
+  azul "\nSegundo broker"
+  local rabbit; rabbit=$(id_ec2_rabbit)
+  if [[ -n "$rabbit" ]]; then
+    ok "EC2 $RABBIT_NOMBRE: $(aws ec2 describe-instances --instance-ids "$rabbit" \
+      --query 'Reservations[0].Instances[0].State.Name' --output text)"
+  else
+    aviso "Sin EC2 de RabbitMQ: la plataforma usará solo SNS/SQS (corre 'aws.sh rabbitmq')"
+  fi
 
   azul "\nRecordatorio de costo"
   aviso "ALB y RDS no se apagan solos: 'aws.sh apagar' baja las tareas, pero el ALB sigue cobrando."
-  aviso "Mirá el crédito consumido en el panel del Learner Lab todos los días."
+  aviso "Mira el crédito consumido en el panel del Learner Lab todos los días."
 }
 
 # ---------------------------------------------------------------------------
@@ -233,15 +327,14 @@ cmd_crear() {
   fi
   ok "API Gateway $api_id"
 
-  # Se guardan los identificadores para que 'desplegar' e 'iniciar' no los busquen de nuevo.
-  cat > "$RAIZ/infra/.recursos" << EOV
-VPC=$vpc
-SUBNETS=$subnets
-SG_TAREAS=$sg_tareas
-ALB_ARN=$alb_arn
-ALB_DNS=$dns
-API_ID=$api_id
-EOV
+  # Se guardan los identificadores para que 'desplegar' e 'iniciar' no los busquen de nuevo. Lo
+  # que guardaron otros comandos (bucket de adjuntos, tópico, Cognito) se conserva.
+  guardar_recurso VPC "$vpc"
+  guardar_recurso SUBNETS "$subnets"
+  guardar_recurso SG_TAREAS "$sg_tareas"
+  guardar_recurso ALB_ARN "$alb_arn"
+  guardar_recurso ALB_DNS "$dns"
+  guardar_recurso API_ID "$api_id"
   aviso "Identificadores guardados en infra/.recursos (ignorado por git)"
   cmd_urls
 }
@@ -280,10 +373,9 @@ cmd_desplegar() {
 
   # Sin estos valores el servicio arranca con un emisor vacío y rechaza todos los tokens,
   # pero el error recién aparece en los logs varios minutos después. Mejor fallar acá.
-  [[ -z "${AZURE_TENANT_ID:-}" || -z "${AZURE_CLIENT_ID:-}" ]] && {
-    falla "Faltan AZURE_TENANT_ID o AZURE_CLIENT_ID. Copiá .env.example a .env y completalos."
-    exit 1
-  }
+  exigir_azure
+  datos_cognito
+  datos_rabbit
 
   # El front se sirve desde el mismo dominio del API Gateway. En un POST el navegador manda
   # igual la cabecera Origin, aunque sea mismo origen, y si ese origen no está declarado el BFF
@@ -312,17 +404,25 @@ cmd_desplegar() {
       -e "s|__SECRETO_DB_ARN__|$secreto|g" \
       -e "s|__AZURE_TENANT_ID__|${AZURE_TENANT_ID:-}|g" \
       -e "s|__AZURE_CLIENT_ID__|${AZURE_CLIENT_ID:-}|g" \
+      -e "s|__COGNITO_ISSUER_URI__|$COGNITO_ISSUER_URI|g" \
+      -e "s|__COGNITO_AUDIENCIA__|$COGNITO_AUDIENCIA|g" \
       -e "s|__CORS_ORIGENES__|$origenes|g" \
       -e "s|__LOG_NIVEL__|${LOG_NIVEL:-INFO}|g" \
       -e "s|__BUCKET_ADJUNTOS__|${BUCKET_ADJUNTOS:-}|g" \
       -e "s|__TOPICO_EVENTOS_ARN__|$topico_arn|g" \
       -e "s|__ADMINISTRADORES__|${ADMINISTRADORES:-}|g" \
+      -e "s|__CORREOS_PERMITIDOS__|${CORREOS_PERMITIDOS:-}|g" \
+      -e "s|__RABBITMQ_HABILITADA__|$RABBITMQ_HABILITADA|g" \
+      -e "s|__RABBITMQ_ADDRESSES__|$RABBITMQ_ADDRESSES|g" \
+      -e "s|__SECRETO_RABBIT_ARN__|$SECRETO_RABBIT_ARN|g" \
       "$RAIZ/infra/task-definition.json" > "$tmp"
 
   # Se quita el bloque de comentarios (ECS rechaza campos que no conoce) y, si la imagen de
   # algún servicio todavía no está en ECR, se quita ese contenedor para no bloquear el despliegue:
   # el contenedor es essential, así que sin imagen la tarea entera no arrancaría.
   local filtro='del(._comentario)'
+  # Sin EC2 de RabbitMQ no hay secreto que leer: esas entradas harían fallar el arranque de la tarea.
+  [[ -z "$SECRETO_RABBIT_ARN" ]] && filtro="$filtro | .containerDefinitions |= map(if .secrets then .secrets |= map(select(.name | startswith(\"RABBITMQ_\") | not)) else . end)"
   for s in "${SERVICIOS[@]}"; do
     if ! aws ecr describe-images --repository-name "$PROYECTO/$s" --image-ids "imageTag=$TAG" >/dev/null 2>&1; then
       aviso "$s aún no está en ECR: se despliega sin ese contenedor"
@@ -330,6 +430,14 @@ cmd_desplegar() {
     fi
   done
   jq "$filtro" "$tmp" > "$tmp.json" && mv "$tmp.json" "$tmp"
+
+  # Cada servicio aparte sale a su propia task definition, chica y sin dependencias de arranque.
+  local s
+  for s in "${SERVICIOS_APARTE[@]}"; do
+    jq --arg s "$s" --arg f "$FAMILIA-$s" '.family = $f | .cpu = "512" | .memory = "1024"
+      | .containerDefinitions |= map(select(.name == $s) | del(.dependsOn))' "$tmp" > "$tmp.$s"
+    jq --arg s "$s" '.containerDefinitions |= map(select(.name != $s))' "$tmp" > "$tmp.json" && mv "$tmp.json" "$tmp"
+  done
 
   local rev; rev=$(aws ecs register-task-definition --cli-input-json "file://$tmp" \
     --query 'taskDefinition.taskDefinitionArn' --output text)
@@ -339,6 +447,7 @@ cmd_desplegar() {
   # Cada target group registrado apunta a su contenedor dentro de la misma tarea.
   local lb_args=()
   for s in "${SERVICIOS[@]}"; do
+    es_aparte "$s" && continue
     local tg; tg=$(aws elbv2 describe-target-groups --names "$PROYECTO-$s" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || true)
     [[ -z "$tg" || "$tg" == "None" ]] && continue
     [[ -d "$RAIZ/$s" ]] || continue
@@ -365,14 +474,47 @@ cmd_desplegar() {
       --load-balancers "${lb_args[@]}" >/dev/null
     ok "servicio creado"
   fi
+
+  for s in "${SERVICIOS_APARTE[@]}"; do
+    [[ -s "$tmp.$s" ]] || continue
+    if ! jq -e '.containerDefinitions | length > 0' "$tmp.$s" >/dev/null; then
+      rm -f "$tmp.$s"; continue   # su imagen no estaba en ECR
+    fi
+    desplegar_aparte "$s" "$tmp.$s"
+    rm -f "$tmp.$s"
+  done
   cmd_urls
+}
+
+# Registra la task definition de un servicio aparte y crea o actualiza su servicio de ECS.
+desplegar_aparte() { # $1 = servicio, $2 = task definition renderizada
+  local s="$1" archivo="$2" rev_s tg servicio="$SERVICIO_ECS-$1"
+  rev_s=$(aws ecs register-task-definition --cli-input-json "file://$archivo" \
+    --query 'taskDefinition.taskDefinitionArn' --output text)
+  ok "task definition registrada: ${rev_s##*/}"
+  tg=$(aws elbv2 describe-target-groups --names "$PROYECTO-$s" --query 'TargetGroups[0].TargetGroupArn' --output text)
+  if aws ecs describe-services --cluster "$CLUSTER" --services "$servicio" \
+       --query 'services[0].status' --output text 2>/dev/null | grep -q ACTIVE; then
+    aws ecs update-service --cluster "$CLUSTER" --service "$servicio" \
+      --task-definition "$rev_s" --desired-count 1 --force-new-deployment \
+      --health-check-grace-period-seconds 300 \
+      --load-balancers "targetGroupArn=$tg,containerName=$s,containerPort=$(puerto_de "$s")" >/dev/null
+    ok "servicio $servicio actualizado"
+  else
+    aws ecs create-service --cluster "$CLUSTER" --service-name "$servicio" \
+      --task-definition "$rev_s" --desired-count 1 --launch-type FARGATE \
+      --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG_TAREAS],assignPublicIp=ENABLED}" \
+      --health-check-grace-period-seconds 300 \
+      --load-balancers "targetGroupArn=$tg,containerName=$s,containerPort=$(puerto_de "$s")" >/dev/null
+    ok "servicio $servicio creado"
+  fi
 }
 
 # ---------------------------------------------------------------------------
 # front — publica el frontend en S3 y lo deja accesible por HTTPS.
 #
-# Pasa por el API Gateway y no se sirve S3 directo porque Azure AD exige HTTPS en los URI de
-# redirección, S3 es HTTP puro y CloudFront no está habilitado. El API Gateway da HTTPS y deja
+# Pasa por el API Gateway y no se sirve S3 directo porque Azure AD y Cognito exigen HTTPS en los
+# URI de redirección (salvo localhost), S3 es HTTP puro y CloudFront no está habilitado. El API Gateway da HTTPS y deja
 # el front y la API en el mismo origen, así el navegador ni siquiera aplica CORS.
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
@@ -432,19 +574,27 @@ cmd_adjuntos() {
   }" >/dev/null
   ok "PUT y GET desde la aplicación"
 
-  grep -q '^BUCKET_ADJUNTOS=' "$RAIZ/infra/.recursos" 2>/dev/null \
-    || echo "BUCKET_ADJUNTOS=$bucket" >> "$RAIZ/infra/.recursos"
+  guardar_recurso BUCKET_ADJUNTOS "$bucket"
   azul "\nBucket de adjuntos listo: $bucket"
 }
 
 cmd_front() {
   source "$RAIZ/infra/.recursos" 2>/dev/null || { falla "Falta correr 'aws.sh crear' primero"; exit 1; }
+  # Las VITE_* de Azure viven en frontend-web/.env.local, no en el .env de la raíz: se cargan aquí
+  # para no tener que exportarlas a mano. Lo que ya venga del entorno tiene prioridad.
+  local local_front="$RAIZ/frontend-web/.env.local"
+  if [[ -f "$local_front" ]]; then
+    while IFS='=' read -r clave valor; do
+      [[ "$clave" =~ ^VITE_(AZURE_CLIENT_ID|AZURE_SCOPE)$ && -z "${!clave:-}" ]] && export "$clave=$valor" || true
+    done < <(grep -E '^VITE_' "$local_front")
+  fi
   # Sin estos valores el front se compila igual pero el login falla, y el error recién
-  # aparece en el navegador. Mejor fallar acá.
+  # aparece en el navegador. Mejor fallar aquí.
   [[ -z "${VITE_AZURE_CLIENT_ID:-}" || -z "${VITE_AZURE_SCOPE:-}" || -z "${AZURE_TENANT_ID:-}" ]] && {
-    falla "Faltan VITE_AZURE_CLIENT_ID, VITE_AZURE_SCOPE o AZURE_TENANT_ID en .env"
+    falla "Faltan VITE_AZURE_CLIENT_ID o VITE_AZURE_SCOPE (frontend-web/.env.local), o AZURE_TENANT_ID (.env)"
     exit 1
   }
+  datos_cognito
 
   local bucket="$PROYECTO-web-$(cuenta)"
 
@@ -453,7 +603,7 @@ cmd_front() {
     aws s3api create-bucket --bucket "$bucket" >/dev/null
   fi
   # El sitio necesita lectura pública. El contenido es el frontend compilado: no hay nada
-  # sensible ahí, los identificadores de Azure son públicos por diseño del flujo.
+  # sensible ahí, los identificadores de Azure y de Cognito son públicos por diseño del flujo.
   aws s3api delete-public-access-block --bucket "$bucket" >/dev/null 2>&1 || true
   aws s3api put-bucket-policy --bucket "$bucket" --policy "{
     \"Version\": \"2012-10-17\",
@@ -484,6 +634,9 @@ cmd_front() {
     && VITE_AZURE_CLIENT_ID="${VITE_AZURE_CLIENT_ID:-}" \
        VITE_AZURE_TENANT_ID="${AZURE_TENANT_ID:-}" \
        VITE_AZURE_SCOPE="${VITE_AZURE_SCOPE:-}" \
+       VITE_COGNITO_AUTORIDAD="$COGNITO_ISSUER_URI" \
+       VITE_COGNITO_CLIENT_ID="$COGNITO_AUDIENCIA" \
+       VITE_COGNITO_DOMINIO="$COGNITO_DOMINIO" \
        VITE_BFF_URL="" npm run build --silent )
   ok "compilado"
 
@@ -512,8 +665,7 @@ cmd_front() {
   # La URL del sitio se arma acá y no se toma de cmd_apigw: allá es una variable local
   # y desde esta función no se ve, así que el script moría al final con "unbound variable"
   # justo después de haber hecho bien todo el trabajo.
-  grep -q '^SITIO_WEB=' "$RAIZ/infra/.recursos" 2>/dev/null \
-    || echo "SITIO_WEB=http://$bucket.s3-website-$REGION.amazonaws.com" >> "$RAIZ/infra/.recursos"
+  guardar_recurso SITIO_WEB "http://$bucket.s3-website-$REGION.amazonaws.com"
   cmd_urls
 }
 
@@ -529,15 +681,14 @@ cmd_front() {
 # ---------------------------------------------------------------------------
 cmd_apigw() {
   source "$RAIZ/infra/.recursos" 2>/dev/null || { falla "Falta correr 'aws.sh crear' primero"; exit 1; }
-  [[ -z "${AZURE_TENANT_ID:-}" || -z "${AZURE_CLIENT_ID:-}" ]] && {
-    falla "Faltan AZURE_TENANT_ID o AZURE_CLIENT_ID en .env"; exit 1; }
+  exigir_azure
+  datos_cognito
 
-  local dns bucket sitio emisor
+  local dns bucket sitio
   dns=$(aws elbv2 describe-load-balancers --load-balancer-arns "$ALB_ARN" \
     --query 'LoadBalancers[0].DNSName' --output text)
   bucket="$PROYECTO-web-$(cuenta)"
   sitio="http://$bucket.s3-website-$REGION.amazonaws.com"
-  emisor="https://login.microsoftonline.com/$AZURE_TENANT_ID/v2.0"
 
   # El AWS CLI aplica --query página por página, así que con muchas rutas devuelve un
   # "None" por cada página que no coincide y el identificador se vuelve inservible.
@@ -551,23 +702,54 @@ cmd_apigw() {
       | jq -r --arg u "$1" '.Items[] | select(.IntegrationUri==$u) | .IntegrationId' | head -1
   }
 
-  # --- Validador de JWT -----------------------------------------------------
-  # El emisor tiene que coincidir EXACTO con el claim 'iss' del token, /v2.0 incluido.
-  # La audiencia es el client-id del registro de la API en Entra ID.
-  local auth_id jwt_cfg
-  jwt_cfg="{\"Audience\":[\"$AZURE_CLIENT_ID\"],\"Issuer\":\"$emisor\"}"
+  # --- Validador de JWT: autorizador Lambda con los dos emisores -------------
+  # Un autorizador JWT nativo acepta un solo emisor, y la plataforma tiene dos: Entra ID (login
+  # con Microsoft, access token) y Cognito (login con Google, ID token). La función valida
+  # firma, vigencia, emisor y audiencia de cada uno (infra/autorizador/index.mjs).
+  # Diferencia con el autorizador JWT: sin token responde 401, pero un token inválido, 403.
+  local acc fn_nombre fn_arn emisores zip auth_id
+  acc=$(cuenta)
+  fn_nombre="$PROYECTO-autorizador"
+  emisores=$(jq -nc --arg ai "https://login.microsoftonline.com/$AZURE_TENANT_ID/v2.0" --arg aa "$AZURE_CLIENT_ID" \
+    --arg ci "$COGNITO_ISSUER_URI" --arg ca "$COGNITO_AUDIENCIA" \
+    '[{iss:$ai, aud:$aa}] + (if $ci != "" then [{iss:$ci, aud:$ca}] else [] end)')
+  zip=$(mktemp -d)/autorizador.zip
+  ( cd "$RAIZ/infra/autorizador" && zip -q "$zip" index.mjs )
+  local entorno; entorno=$(jq -nc --arg e "$emisores" '{Variables:{EMISORES:$e}}')
+  if aws lambda get-function --function-name "$fn_nombre" >/dev/null 2>&1; then
+    aws lambda update-function-code --function-name "$fn_nombre" --zip-file "fileb://$zip" >/dev/null
+    aws lambda wait function-updated --function-name "$fn_nombre"
+    aws lambda update-function-configuration --function-name "$fn_nombre" --environment "$entorno" >/dev/null
+    aws lambda wait function-updated --function-name "$fn_nombre"
+  else
+    aws lambda create-function --function-name "$fn_nombre" --runtime nodejs20.x --handler index.handler \
+      --role "arn:aws:iam::$acc:role/LabRole" --zip-file "fileb://$zip" --timeout 10 --memory-size 256 \
+      --environment "$entorno" >/dev/null \
+      || { falla "El laboratorio no permitió crear la Lambda (ver plan B en docs/guia-cognito-google.md)"; exit 1; }
+    aws lambda wait function-active-v2 --function-name "$fn_nombre"
+  fi
+  rm -rf "$(dirname "$zip")"
+  fn_arn=$(aws lambda get-function --function-name "$fn_nombre" --query 'Configuration.FunctionArn' --output text)
+  aws lambda add-permission --function-name "$fn_nombre" --statement-id apigw-invoca \
+    --action lambda:InvokeFunction --principal apigateway.amazonaws.com \
+    --source-arn "arn:aws:execute-api:$REGION:$acc:$API_ID/*" >/dev/null 2>&1 || true
+  ok "Lambda $fn_nombre: $(echo "$emisores" | jq length) emisor(es)"
+
+  local auth_lambda="$PROYECTO-dos-emisores"
   auth_id=$(aws apigatewayv2 get-authorizers --api-id "$API_ID" --output json \
-    | jq -r --arg n "$AUTH_NOMBRE" '.Items[] | select(.Name==$n) | .AuthorizerId' | head -1)
+    | jq -r --arg n "$auth_lambda" '.Items[] | select(.Name==$n) | .AuthorizerId' | head -1)
+  local uri="arn:aws:apigateway:$REGION:lambda:path/2015-03-31/functions/$fn_arn/invocations"
   if [[ -z "$auth_id" ]]; then
-    auth_id=$(aws apigatewayv2 create-authorizer --api-id "$API_ID" \
-      --name "$AUTH_NOMBRE" --authorizer-type JWT \
-      --identity-source '$request.header.Authorization' \
-      --jwt-configuration "$jwt_cfg" --query AuthorizerId --output text)
+    auth_id=$(aws apigatewayv2 create-authorizer --api-id "$API_ID" --name "$auth_lambda" \
+      --authorizer-type REQUEST --authorizer-uri "$uri" \
+      --authorizer-payload-format-version 2.0 --enable-simple-responses \
+      --identity-source '$request.header.Authorization' --authorizer-result-ttl-in-seconds 300 \
+      --query AuthorizerId --output text)
   else
     aws apigatewayv2 update-authorizer --api-id "$API_ID" --authorizer-id "$auth_id" \
-      --jwt-configuration "$jwt_cfg" >/dev/null
+      --authorizer-uri "$uri" >/dev/null
   fi
-  ok "validador de JWT '$AUTH_NOMBRE': emisor y audiencia del tenant"
+  ok "autorizador '$auth_lambda' (Lambda): Entra ID + Cognito"
 
   # --- Rutas ----------------------------------------------------------------
   # La integración de un destino, creándola si falta. Una vez por servicio y no por método:
@@ -594,7 +776,7 @@ cmd_apigw() {
   ruta() {
     local id extra
     extra=(--authorization-type NONE)
-    [[ "${3:-}" == "jwt" ]] && extra=(--authorization-type JWT --authorizer-id "$auth_id")
+    [[ "${3:-}" == "jwt" ]] && extra=(--authorization-type CUSTOM --authorizer-id "$auth_id")
 
     id=$(id_ruta "$1")
     if [[ -n "$id" ]]; then
@@ -684,6 +866,13 @@ cmd_apigw() {
   done
   [[ $huerfanas -gt 0 ]] && ok "$huerfanas integraciones sin uso eliminadas"
 
+  # El autorizador JWT de un solo emisor (EP1) ya no lo usa ninguna ruta: se elimina.
+  local auth_viejo
+  auth_viejo=$(aws apigatewayv2 get-authorizers --api-id "$API_ID" --output json \
+    | jq -r --arg n "$AUTH_NOMBRE" '.Items[] | select(.Name==$n) | .AuthorizerId' | head -1)
+  [[ -n "$auth_viejo" ]] && aws apigatewayv2 delete-authorizer --api-id "$API_ID" --authorizer-id "$auth_viejo" \
+    >/dev/null 2>&1 && ok "autorizador JWT anterior ('$AUTH_NOMBRE') eliminado"
+
   # --- Registro de accesos ---------------------------------------------------
   # Sin esto, un rechazo del API Gateway no deja rastro: no se sabe qué ruta coincidió, si
   # falló el validador o si el error vino del backend. Diagnosticar un 403 se vuelve adivinar.
@@ -722,15 +911,30 @@ cmd_iniciar() {
   fi
   ok "base disponible"
 
-  aws ecs update-service --cluster "$CLUSTER" --service "$SERVICIO_ECS" --desired-count 1 >/dev/null
-  azul "Levantando la tarea (tarda ~2 min en pasar el health check)..."
-  aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICIO_ECS" && ok "tarea estable"
+  local rabbit; rabbit=$(id_ec2_rabbit)
+  if [[ -n "$rabbit" ]]; then
+    aws ec2 start-instances --instance-ids "$rabbit" >/dev/null 2>&1 || true
+    aws ec2 wait instance-running --instance-ids "$rabbit" && ok "RabbitMQ (EC2) encendido"
+  fi
+
+  local servicio
+  for servicio in $(servicios_ecs); do
+    aws ecs update-service --cluster "$CLUSTER" --service "$servicio" --desired-count 1 >/dev/null 2>&1 || true
+  done
+  azul "Levantando las tareas (tardan unos minutos en pasar el health check)..."
+  aws ecs wait services-stable --cluster "$CLUSTER" --services $(servicios_ecs) && ok "tareas estables"
   cmd_urls
 }
 
 cmd_apagar() {
-  aws ecs update-service --cluster "$CLUSTER" --service "$SERVICIO_ECS" --desired-count 0 >/dev/null
+  local servicio
+  for servicio in $(servicios_ecs); do
+    aws ecs update-service --cluster "$CLUSTER" --service "$servicio" --desired-count 0 >/dev/null 2>&1 || true
+  done
   ok "tareas de Fargate en cero"
+
+  local rabbit; rabbit=$(id_ec2_rabbit)
+  [[ -n "$rabbit" ]] && aws ec2 stop-instances --instance-ids "$rabbit" >/dev/null 2>&1 && ok "RabbitMQ (EC2) detenido"
 
   # Detener la base conserva los datos y el endpoint; solo se sigue pagando el disco.
   # Ojo: AWS la vuelve a encender sola a los 7 días.
@@ -827,9 +1031,191 @@ cmd_mensajeria() {
     ok "$cola → $cola-descartes · filtro ${filtro:-(ninguno, recibe todo)}"
   done
 
-  grep -q '^TOPICO_EVENTOS_ARN=' "$RAIZ/infra/.recursos" 2>/dev/null \
-    || echo "TOPICO_EVENTOS_ARN=$topico" >> "$RAIZ/infra/.recursos"
+  guardar_recurso TOPICO_EVENTOS_ARN "$topico"
   azul "\nMensajería lista. El ARN del tópico quedó en infra/.recursos (ignorado por git)."
+}
+
+# ---------------------------------------------------------------------------
+# cognito — el login con Google: user pool, dominio, app client y Google como IdP. Idempotente.
+# (El login con Microsoft sigue en Azure AD / Entra ID; esto no lo toca.)
+#
+# Sin registro abierto: las cuentas de Google se crean solas al primer login, pero el backend
+# solo les da rol si están en CORREOS_PERMITIDOS.
+#
+# Google es opcional: si GOOGLE_CLIENT_ID está en el entorno, el secreto se pide por teclado y
+# no se guarda en ningún archivo.
+# ---------------------------------------------------------------------------
+cmd_cognito() {
+  local acc pool dominio api_url cliente proveedores
+  acc=$(cuenta)
+  dominio="$PROYECTO-$acc"
+  api_url=$(aws apigatewayv2 get-apis --query "Items[?Name=='$API_NOMBRE'].ApiEndpoint" --output text)
+
+  azul "1/4 · User pool"
+  pool=$(aws cognito-idp list-user-pools --max-results 60 --output json \
+    | jq -r --arg n "$POOL_NOMBRE" '.UserPools[] | select(.Name==$n) | .Id' | head -1)
+  if [[ -z "$pool" ]]; then
+    pool=$(aws cognito-idp create-user-pool --pool-name "$POOL_NOMBRE" \
+      --username-attributes email --auto-verified-attributes email \
+      --admin-create-user-config AllowAdminCreateUserOnly=true \
+      --policies 'PasswordPolicy={MinimumLength=10,RequireUppercase=true,RequireLowercase=true,RequireNumbers=true,RequireSymbols=false}' \
+      --account-recovery-setting 'RecoveryMechanisms=[{Priority=1,Name=verified_email}]' \
+      --query 'UserPool.Id' --output text)
+  fi
+  ok "$POOL_NOMBRE ($pool)"
+
+  azul "2/4 · Dominio de inicio de sesión"
+  if ! aws cognito-idp describe-user-pool-domain --domain "$dominio" --query 'DomainDescription.UserPoolId' \
+       --output text 2>/dev/null | grep -q "$pool"; then
+    # Versión 1 = la página de login clásica: no necesita configurar una marca para funcionar.
+    aws cognito-idp create-user-pool-domain --domain "$dominio" --user-pool-id "$pool" \
+      --managed-login-version 1 >/dev/null 2>&1 \
+      || aws cognito-idp create-user-pool-domain --domain "$dominio" --user-pool-id "$pool" >/dev/null
+  fi
+  ok "https://$dominio.auth.$REGION.amazoncognito.com"
+
+  azul "3/4 · Google como proveedor externo"
+  # El login con correo y contraseña es de Microsoft (Entra ID): aquí solo entra Google. Mientras
+  # Google no esté configurado, el app client necesita algún proveedor y queda con COGNITO.
+  proveedores="COGNITO"
+  if [[ -n "${GOOGLE_CLIENT_ID:-}" ]]; then
+    local secreto="${GOOGLE_CLIENT_SECRET:-}"
+    if [[ -z "$secreto" ]]; then
+      read -r -s -p "  Client secret de Google (no se muestra ni se guarda): " secreto; echo
+    fi
+    local detalles="client_id=$GOOGLE_CLIENT_ID,client_secret=$secreto,authorize_scopes=openid email profile"
+    local mapeo="email=email,email_verified=email_verified,name=name,username=sub"
+    if aws cognito-idp describe-identity-provider --user-pool-id "$pool" --provider-name Google >/dev/null 2>&1; then
+      aws cognito-idp update-identity-provider --user-pool-id "$pool" --provider-name Google \
+        --provider-details "$detalles" --attribute-mapping "$mapeo" >/dev/null
+    else
+      aws cognito-idp create-identity-provider --user-pool-id "$pool" --provider-name Google \
+        --provider-type Google --provider-details "$detalles" --attribute-mapping "$mapeo" >/dev/null
+    fi
+    unset secreto detalles
+    proveedores="Google"
+    ok "Google configurado"
+  elif aws cognito-idp describe-identity-provider --user-pool-id "$pool" --provider-name Google >/dev/null 2>&1; then
+    proveedores="Google"
+    ok "Google ya estaba configurado"
+  else
+    aviso "Sin Google: define GOOGLE_CLIENT_ID y vuelve a correr el comando (ver docs/guia-cognito-google.md)"
+  fi
+
+  azul "4/4 · App client del frontend (público, sin secreto, Authorization Code + PKCE)"
+  # Las URL tienen que coincidir EXACTO con window.location.origin: sin barra final.
+  local urls="$api_url http://localhost:5173"
+  local args=(--user-pool-id "$pool" --client-name "$CLIENTE_NOMBRE"
+    --allowed-o-auth-flows code --allowed-o-auth-flows-user-pool-client
+    --allowed-o-auth-scopes openid email profile
+    --callback-urls $urls --logout-urls $urls
+    --supported-identity-providers $proveedores
+    --explicit-auth-flows ALLOW_REFRESH_TOKEN_AUTH ALLOW_USER_SRP_AUTH
+    --prevent-user-existence-errors ENABLED
+    --id-token-validity 60 --access-token-validity 60 --refresh-token-validity 1
+    --token-validity-units AccessToken=minutes,IdToken=minutes,RefreshToken=days)
+  cliente=$(aws cognito-idp list-user-pool-clients --user-pool-id "$pool" --output json \
+    | jq -r --arg n "$CLIENTE_NOMBRE" '.UserPoolClients[] | select(.ClientName==$n) | .ClientId' | head -1)
+  if [[ -z "$cliente" ]]; then
+    cliente=$(aws cognito-idp create-user-pool-client "${args[@]}" --no-generate-secret \
+      --query 'UserPoolClient.ClientId' --output text)
+  else
+    # update reemplaza la configuración completa: por eso se mandan todos los parámetros.
+    aws cognito-idp update-user-pool-client "${args[@]:2}" --user-pool-id "$pool" --client-id "$cliente" >/dev/null
+  fi
+  ok "$CLIENTE_NOMBRE ($cliente) · proveedores: $proveedores"
+
+  guardar_recurso COGNITO_POOL_ID "$pool"
+  guardar_recurso COGNITO_CLIENT_ID "$cliente"
+  guardar_recurso COGNITO_DOMINIO "$dominio.auth.$REGION.amazoncognito.com"
+  azul "\nCognito listo. Para desarrollo local, en .env:"
+  echo "  COGNITO_ISSUER_URI=https://cognito-idp.$REGION.amazonaws.com/$pool"
+  echo "  COGNITO_AUDIENCIA=$cliente"
+  echo "  Y en frontend-web/.env.local: VITE_COGNITO_AUTORIDAD (igual al emisor),"
+  echo "  VITE_COGNITO_CLIENT_ID=$cliente y VITE_COGNITO_DOMINIO=$dominio.auth.$REGION.amazoncognito.com"
+}
+
+# ---------------------------------------------------------------------------
+# rabbitmq — el segundo broker en la nube: una EC2 con el clúster de 2 nodos en docker-compose.
+# Idempotente. Amazon MQ no está habilitado en el lab, por eso va en EC2.
+#
+#   - Credenciales y cookie de Erlang en Secrets Manager ($RABBIT_SECRETO): nunca en el repo.
+#   - 5672/5673 (AMQP) solo para las tareas de Fargate; 15672 (consola) solo para tu IP.
+#   - Se entra por SSM (LabInstanceProfile), sin llaves SSH.
+# ---------------------------------------------------------------------------
+cmd_rabbitmq() {
+  source "$RAIZ/infra/.recursos" 2>/dev/null || { falla "Falta correr 'aws.sh crear' primero"; exit 1; }
+  local vpc sg mi_ip ami id secreto subnet
+
+  azul "1/4 · Credenciales en Secrets Manager"
+  if ! aws secretsmanager describe-secret --secret-id "$RABBIT_SECRETO" >/dev/null 2>&1; then
+    secreto=$(jq -nc --arg c "$(openssl rand -hex 16)" --arg k "$(openssl rand -hex 24)" \
+      '{usuario:"duocconecta", clave:$c, cookie:$k}')
+    aws secretsmanager create-secret --name "$RABBIT_SECRETO" --secret-string "$secreto" >/dev/null
+    unset secreto
+  fi
+  ok "$RABBIT_SECRETO"
+
+  azul "2/4 · Security group"
+  vpc="$VPC"
+  sg=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=$RABBIT_NOMBRE" "Name=vpc-id,Values=$vpc" \
+    --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null)
+  if [[ "$sg" == "None" || -z "$sg" ]]; then
+    sg=$(aws ec2 create-security-group --group-name "$RABBIT_NOMBRE" --description "RabbitMQ de DuocConecta" \
+      --vpc-id "$vpc" --query GroupId --output text)
+  fi
+  for p in 5672 5673; do
+    aws ec2 authorize-security-group-ingress --group-id "$sg" --protocol tcp --port "$p" --source-group "$SG_TAREAS" >/dev/null 2>&1 || true
+  done
+  mi_ip=$(curl -s https://checkip.amazonaws.com | tr -d '\n')
+  aws ec2 authorize-security-group-ingress --group-id "$sg" --protocol tcp --port 15672 --cidr "$mi_ip/32" >/dev/null 2>&1 || true
+  ok "$RABBIT_NOMBRE: AMQP solo desde las tareas · consola solo desde $mi_ip"
+
+  azul "3/4 · EC2 con docker-compose"
+  id=$(id_ec2_rabbit)
+  if [[ -z "$id" ]]; then
+    ami=$(aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
+      --query Parameter.Value --output text)
+    subnet=$(echo "$SUBNETS" | cut -d, -f1)
+    local datos; datos=$(mktemp)
+    # Los mismos archivos del repositorio: lo que corre en la nube es lo que se prueba en local.
+    cat > "$datos" <<EOU
+#!/bin/bash
+set -eux
+dnf install -y docker jq
+systemctl enable --now docker
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -sSL "https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-x86_64" \\
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+mkdir -p /opt/rabbitmq && cd /opt/rabbitmq
+echo '$(base64 < "$RAIZ/docker/rabbitmq/docker-compose.yml" | tr -d '\n')' | base64 -d > docker-compose.yml
+echo '$(base64 < "$RAIZ/docker/rabbitmq/rabbitmq.conf" | tr -d '\n')' | base64 -d > rabbitmq.conf
+S=\$(aws secretsmanager get-secret-value --region $REGION --secret-id $RABBIT_SECRETO --query SecretString --output text)
+printf 'RABBITMQ_USUARIO=%s\nRABBITMQ_CLAVE=%s\nRABBITMQ_COOKIE=%s\n' \\
+  "\$(echo "\$S" | jq -r .usuario)" "\$(echo "\$S" | jq -r .clave)" "\$(echo "\$S" | jq -r .cookie)" > .env
+chmod 600 .env
+docker compose up -d
+EOU
+    id=$(aws ec2 run-instances --image-id "$ami" --instance-type t3.small --subnet-id "$subnet" \
+      --security-group-ids "$sg" --iam-instance-profile Name=LabInstanceProfile \
+      --metadata-options HttpTokens=required --associate-public-ip-address \
+      --user-data "file://$datos" \
+      --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$RABBIT_NOMBRE}]" \
+      --query 'Instances[0].InstanceId' --output text)
+    rm -f "$datos"
+  fi
+  aws ec2 start-instances --instance-ids "$id" >/dev/null 2>&1 || true
+  aws ec2 wait instance-running --instance-ids "$id"
+  ok "EC2 $id encendida (el clúster tarda ~2 min en formarse la primera vez)"
+
+  azul "4/4 · Datos"
+  local ip_pub ip_priv
+  ip_pub=$(aws ec2 describe-instances --instance-ids "$id" --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+  ip_priv=$(aws ec2 describe-instances --instance-ids "$id" --query 'Reservations[0].Instances[0].PrivateIpAddress' --output text)
+  echo "  AMQP (tareas): $ip_priv:5672,$ip_priv:5673"
+  echo "  Consola:       http://$ip_pub:15672   (usuario y clave en Secrets Manager: $RABBIT_SECRETO)"
+  echo "  Entrar:        aws ssm start-session --target $id   →   sudo docker compose -f /opt/rabbitmq/docker-compose.yml ps"
 }
 
 case "${1:-}" in
@@ -844,5 +1230,7 @@ case "${1:-}" in
   apagar)    cmd_apagar ;;
   urls)      cmd_urls ;;
   mensajeria) cmd_mensajeria ;;
+  cognito)   cmd_cognito ;;
+  rabbitmq)  cmd_rabbitmq ;;
   *) sed -n '2,25p' "$0"; exit 1 ;;
 esac

@@ -54,3 +54,6 @@ infra/.recursos
 
 # --- Frontend ---
 frontend-web/.env.local
+
+# Proxy local que reemplaza al API Gateway al probar en la máquina: no es parte de la entrega.
+frontend-web/vite.local.config.js

@@ -6,6 +6,9 @@
     "de red y el BFF llega a los microservicios por http://localhost:8081, :8082 y :8083.",
     "",
     "EP2: ms-notificaciones (8084) consume las colas SQS y ms-mensajeria (8085) las administra.",
+    "ms-mensajeria se despliega en su propia tarea y su propio servicio (aws.sh, SERVICIOS_APARTE):",
+    "ECS admite como máximo 5 target groups por servicio. Se puede porque no usa la base ni",
+    "llama a los demás por localhost.",
     "ms-proyectos y ms-contacto publican en el tópico SNS; su ARN llega en SNS_TOPICO_EVENTOS_ARN.",
     "Las credenciales de AWS salen de LabRole (taskRoleArn): no hay claves en variables.",
     "",
@@ -37,6 +40,10 @@
         { "name": "AZURE_TENANT_ID", "value": "__AZURE_TENANT_ID__" },
         { "name": "LOG_NIVEL", "value": "__LOG_NIVEL__" },
         { "name": "AZURE_CLIENT_ID", "value": "__AZURE_CLIENT_ID__" },
+        { "name": "COGNITO_ISSUER_URI", "value": "__COGNITO_ISSUER_URI__" },
+        { "name": "COGNITO_AUDIENCIA", "value": "__COGNITO_AUDIENCIA__" },
+        { "name": "ADMINISTRADORES", "value": "__ADMINISTRADORES__" },
+        { "name": "CORREOS_PERMITIDOS", "value": "__CORREOS_PERMITIDOS__" },
         { "name": "DB_URL", "value": "jdbc:postgresql://__RDS_ENDPOINT__:5432/duocconecta" },
         { "name": "DB_USER", "value": "duocconecta" }
       ],
@@ -70,6 +77,10 @@
         { "name": "AZURE_TENANT_ID", "value": "__AZURE_TENANT_ID__" },
         { "name": "LOG_NIVEL", "value": "__LOG_NIVEL__" },
         { "name": "AZURE_CLIENT_ID", "value": "__AZURE_CLIENT_ID__" },
+        { "name": "COGNITO_ISSUER_URI", "value": "__COGNITO_ISSUER_URI__" },
+        { "name": "COGNITO_AUDIENCIA", "value": "__COGNITO_AUDIENCIA__" },
+        { "name": "ADMINISTRADORES", "value": "__ADMINISTRADORES__" },
+        { "name": "CORREOS_PERMITIDOS", "value": "__CORREOS_PERMITIDOS__" },
         { "name": "MS_USUARIOS_URL", "value": "http://localhost:8081" },
         { "name": "MS_PROYECTOS_URL", "value": "http://localhost:8082" },
         { "name": "MS_CONTACTO_URL", "value": "http://localhost:8083" },
@@ -105,14 +116,21 @@
         { "name": "AZURE_TENANT_ID", "value": "__AZURE_TENANT_ID__" },
         { "name": "LOG_NIVEL", "value": "__LOG_NIVEL__" },
         { "name": "AZURE_CLIENT_ID", "value": "__AZURE_CLIENT_ID__" },
+        { "name": "COGNITO_ISSUER_URI", "value": "__COGNITO_ISSUER_URI__" },
+        { "name": "COGNITO_AUDIENCIA", "value": "__COGNITO_AUDIENCIA__" },
+        { "name": "RABBITMQ_HABILITADA", "value": "__RABBITMQ_HABILITADA__" },
+        { "name": "RABBITMQ_ADDRESSES", "value": "__RABBITMQ_ADDRESSES__" },
+        { "name": "ADMINISTRADORES", "value": "__ADMINISTRADORES__" },
+        { "name": "CORREOS_PERMITIDOS", "value": "__CORREOS_PERMITIDOS__" },
         { "name": "DB_URL", "value": "jdbc:postgresql://__RDS_ENDPOINT__:5432/duocconecta" },
         { "name": "DB_USER", "value": "duocconecta" },
         { "name": "S3_BUCKET_ADJUNTOS", "value": "__BUCKET_ADJUNTOS__" },
         { "name": "AWS_REGION", "value": "__REGION__" },
-        { "name": "SNS_TOPICO_EVENTOS_ARN", "value": "__TOPICO_EVENTOS_ARN__" },
-        { "name": "ADMINISTRADORES", "value": "__ADMINISTRADORES__" }
+        { "name": "SNS_TOPICO_EVENTOS_ARN", "value": "__TOPICO_EVENTOS_ARN__" }
       ],
       "secrets": [
+        { "name": "RABBITMQ_USUARIO", "valueFrom": "__SECRETO_RABBIT_ARN__:usuario::" },
+        { "name": "RABBITMQ_CLAVE", "valueFrom": "__SECRETO_RABBIT_ARN__:clave::" },
         { "name": "DB_PASSWORD", "valueFrom": "__SECRETO_DB_ARN__:password::" }
       ],
       "logConfiguration": {
@@ -142,12 +160,20 @@
         { "name": "AZURE_TENANT_ID", "value": "__AZURE_TENANT_ID__" },
         { "name": "LOG_NIVEL", "value": "__LOG_NIVEL__" },
         { "name": "AZURE_CLIENT_ID", "value": "__AZURE_CLIENT_ID__" },
+        { "name": "COGNITO_ISSUER_URI", "value": "__COGNITO_ISSUER_URI__" },
+        { "name": "COGNITO_AUDIENCIA", "value": "__COGNITO_AUDIENCIA__" },
+        { "name": "RABBITMQ_HABILITADA", "value": "__RABBITMQ_HABILITADA__" },
+        { "name": "RABBITMQ_ADDRESSES", "value": "__RABBITMQ_ADDRESSES__" },
+        { "name": "ADMINISTRADORES", "value": "__ADMINISTRADORES__" },
+        { "name": "CORREOS_PERMITIDOS", "value": "__CORREOS_PERMITIDOS__" },
         { "name": "DB_URL", "value": "jdbc:postgresql://__RDS_ENDPOINT__:5432/duocconecta" },
         { "name": "DB_USER", "value": "duocconecta" },
         { "name": "AWS_REGION", "value": "__REGION__" },
         { "name": "SNS_TOPICO_EVENTOS_ARN", "value": "__TOPICO_EVENTOS_ARN__" }
       ],
       "secrets": [
+        { "name": "RABBITMQ_USUARIO", "valueFrom": "__SECRETO_RABBIT_ARN__:usuario::" },
+        { "name": "RABBITMQ_CLAVE", "valueFrom": "__SECRETO_RABBIT_ARN__:clave::" },
         { "name": "DB_PASSWORD", "valueFrom": "__SECRETO_DB_ARN__:password::" }
       ],
       "logConfiguration": {
@@ -177,12 +203,19 @@
         { "name": "AZURE_TENANT_ID", "value": "__AZURE_TENANT_ID__" },
         { "name": "LOG_NIVEL", "value": "__LOG_NIVEL__" },
         { "name": "AZURE_CLIENT_ID", "value": "__AZURE_CLIENT_ID__" },
+        { "name": "COGNITO_ISSUER_URI", "value": "__COGNITO_ISSUER_URI__" },
+        { "name": "COGNITO_AUDIENCIA", "value": "__COGNITO_AUDIENCIA__" },
+        { "name": "RABBITMQ_HABILITADA", "value": "__RABBITMQ_HABILITADA__" },
+        { "name": "RABBITMQ_ADDRESSES", "value": "__RABBITMQ_ADDRESSES__" },
+        { "name": "ADMINISTRADORES", "value": "__ADMINISTRADORES__" },
+        { "name": "CORREOS_PERMITIDOS", "value": "__CORREOS_PERMITIDOS__" },
         { "name": "DB_URL", "value": "jdbc:postgresql://__RDS_ENDPOINT__:5432/duocconecta" },
         { "name": "DB_USER", "value": "duocconecta" },
-        { "name": "AWS_REGION", "value": "__REGION__" },
-        { "name": "ADMINISTRADORES", "value": "__ADMINISTRADORES__" }
+        { "name": "AWS_REGION", "value": "__REGION__" }
       ],
       "secrets": [
+        { "name": "RABBITMQ_USUARIO", "valueFrom": "__SECRETO_RABBIT_ARN__:usuario::" },
+        { "name": "RABBITMQ_CLAVE", "valueFrom": "__SECRETO_RABBIT_ARN__:clave::" },
         { "name": "DB_PASSWORD", "valueFrom": "__SECRETO_DB_ARN__:password::" }
       ],
       "logConfiguration": {
@@ -212,8 +245,17 @@
         { "name": "AZURE_TENANT_ID", "value": "__AZURE_TENANT_ID__" },
         { "name": "LOG_NIVEL", "value": "__LOG_NIVEL__" },
         { "name": "AZURE_CLIENT_ID", "value": "__AZURE_CLIENT_ID__" },
-        { "name": "AWS_REGION", "value": "__REGION__" },
-        { "name": "ADMINISTRADORES", "value": "__ADMINISTRADORES__" }
+        { "name": "COGNITO_ISSUER_URI", "value": "__COGNITO_ISSUER_URI__" },
+        { "name": "COGNITO_AUDIENCIA", "value": "__COGNITO_AUDIENCIA__" },
+        { "name": "RABBITMQ_HABILITADA", "value": "__RABBITMQ_HABILITADA__" },
+        { "name": "RABBITMQ_ADDRESSES", "value": "__RABBITMQ_ADDRESSES__" },
+        { "name": "ADMINISTRADORES", "value": "__ADMINISTRADORES__" },
+        { "name": "CORREOS_PERMITIDOS", "value": "__CORREOS_PERMITIDOS__" },
+        { "name": "AWS_REGION", "value": "__REGION__" }
+      ],
+      "secrets": [
+        { "name": "RABBITMQ_USUARIO", "valueFrom": "__SECRETO_RABBIT_ARN__:usuario::" },
+        { "name": "RABBITMQ_CLAVE", "valueFrom": "__SECRETO_RABBIT_ARN__:clave::" }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
