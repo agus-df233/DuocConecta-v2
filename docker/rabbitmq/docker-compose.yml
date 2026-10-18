@@ -1,0 +1,47 @@
+# RabbitMQ de DuocConecta (EP2): clúster de 2 nodos.
+#
+#   docker compose -f docker/rabbitmq/docker-compose.yml up -d
+#
+# Lo mismo corre en la nube, en la EC2 que crea "infra/aws.sh rabbitmq".
+# Consola: http://localhost:15672 (nodo 1) y http://localhost:15673 (nodo 2).
+# Las credenciales vienen de variables de entorno; los valores por defecto son solo para local.
+x-nodo: &nodo
+  image: rabbitmq:4.1-management
+  restart: unless-stopped
+  environment:
+    # Los dos nodos tienen que compartir la cookie de Erlang para formar el clúster.
+    RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_COOKIE:-duocconecta-cookie-local}
+    RABBITMQ_DEFAULT_USER: ${RABBITMQ_USUARIO:-duocconecta}
+    RABBITMQ_DEFAULT_PASS: ${RABBITMQ_CLAVE:-duocconecta}
+  healthcheck:
+    test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+    interval: 10s
+    timeout: 10s
+    retries: 12
+
+services:
+  rabbit1:
+    <<: *nodo
+    hostname: rabbit1
+    container_name: duocconecta-rabbit1
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # consola
+    volumes:
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - datos-rabbit1:/var/lib/rabbitmq
+
+  rabbit2:
+    <<: *nodo
+    hostname: rabbit2
+    container_name: duocconecta-rabbit2
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    volumes:
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - datos-rabbit2:/var/lib/rabbitmq
+
+volumes:
+  datos-rabbit1:
+  datos-rabbit2:

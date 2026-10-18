@@ -8,6 +8,10 @@ import cl.duoc.duocconecta.notificaciones.exception.RecursoNoEncontradoException
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
+import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.amqp.core.QueueInformation;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.Message;
@@ -16,7 +20,7 @@ import software.amazon.awssdk.services.sqs.model.MessageSystemAttributeName;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 
 /**
- * Mira las DLQ sin vaciarlas.
+ * Mira las DLQ sin vaciarlas, las de SQS y las de RabbitMQ.
  *
  * <p>No hay un consumidor que las vacíe a propósito: lo descartado se queda para revisarlo y, una
  * vez corregida la causa, devolverlo a su cola con el redrive de ms-mensajeria.</p>
@@ -24,11 +28,17 @@ import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 @Service
 public class MonitorDescartes {
 
+    public static final String SQS = "SQS";
+    public static final String RABBIT = "RabbitMQ";
+
     private final SqsClient clienteSqs;
+    private final ObjectProvider<AmqpAdmin> adminRabbit;
     private final PropiedadesMensajeria propiedades;
 
-    public MonitorDescartes(SqsClient clienteSqs, PropiedadesMensajeria propiedades) {
+    public MonitorDescartes(SqsClient clienteSqs, ObjectProvider<AmqpAdmin> adminRabbit,
+                            PropiedadesMensajeria propiedades) {
         this.clienteSqs = clienteSqs;
+        this.adminRabbit = adminRabbit;
         this.propiedades = propiedades;
     }
 
@@ -41,8 +51,17 @@ public class MonitorDescartes {
         return nombres;
     }
 
+    /** Las DLQ de RabbitMQ. Vacío si el segundo broker está deshabilitado. */
+    public List<String> colasDeDescarteRabbit() {
+        return rabbitActivo() ? List.copyOf(propiedades.getRabbit().getDescartes().values()) : List.of();
+    }
+
+    /** Cuántos mensajes hay en cada DLQ de los dos brokers. */
     public List<EstadoCola> estado() {
-        return colasDeDescarte().stream().map(nombre -> new EstadoCola(nombre, mensajes(nombre))).toList();
+        return Stream.concat(
+                colasDeDescarte().stream().map(nombre -> new EstadoCola(SQS, nombre, mensajes(nombre))),
+                colasDeDescarteRabbit().stream().map(nombre -> new EstadoCola(RABBIT, nombre, mensajesRabbit(nombre))))
+                .toList();
     }
 
     /**
@@ -66,6 +85,16 @@ public class MonitorDescartes {
                         .attributeNames(QueueAttributeName.APPROXIMATE_NUMBER_OF_MESSAGES))
                 .attributes().get(QueueAttributeName.APPROXIMATE_NUMBER_OF_MESSAGES);
         return valor == null ? 0 : Long.parseLong(valor);
+    }
+
+    /** Mensajes de una DLQ de RabbitMQ. Una cola que todavía no existe cuenta como vacía. */
+    public long mensajesRabbit(String nombre) {
+        QueueInformation info = adminRabbit.getObject().getQueueInfo(nombre);
+        return info == null ? 0 : info.getMessageCount();
+    }
+
+    private boolean rabbitActivo() {
+        return propiedades.getRabbit().isHabilitada() && adminRabbit.getIfAvailable() != null;
     }
 
     private static MensajeDescartado aDescartado(Message mensaje) {

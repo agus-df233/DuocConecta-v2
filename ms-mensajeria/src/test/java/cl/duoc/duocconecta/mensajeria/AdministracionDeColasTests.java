@@ -40,6 +40,7 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.CreateQueueRequest;
 import software.amazon.awssdk.services.sqs.model.CreateQueueResponse;
 import software.amazon.awssdk.services.sqs.model.DeleteQueueRequest;
+import software.amazon.awssdk.services.sqs.model.PurgeQueueRequest;
 import software.amazon.awssdk.services.sqs.model.GetQueueAttributesRequest;
 import software.amazon.awssdk.services.sqs.model.GetQueueAttributesResponse;
 import software.amazon.awssdk.services.sqs.model.GetQueueUrlRequest;
@@ -161,6 +162,20 @@ class AdministracionDeColasTests {
         mockMvc.perform(delete("/api/v1/mensajeria/topicos/duocconecta-eventos").with(admin()))
                 .andExpect(status().isConflict());
         verify(sqs, never()).deleteQueue(any(DeleteQueueRequest.class));
+    }
+
+    @Test
+    @DisplayName("Una cola ajena a la plataforma no se toca: 400 sin llamar a AWS")
+    void colaAjena() throws Exception {
+        mockMvc.perform(delete("/api/v1/mensajeria/colas/cola-de-otro-equipo").with(admin()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail", containsString("duocconecta-")));
+        mockMvc.perform(post("/api/v1/mensajeria/colas/cola-de-otro-equipo/purga").with(admin()))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/mensajeria/colas/cola-de-otro-equipo").with(admin()))
+                .andExpect(status().isBadRequest());
+        verify(sqs, never()).deleteQueue(any(DeleteQueueRequest.class));
+        verify(sqs, never()).purgeQueue(any(PurgeQueueRequest.class));
     }
 
     @Test

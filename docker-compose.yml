@@ -1,5 +1,9 @@
 # Un solo contenedor de PostgreSQL para todo el monorepo.
 # Cada microservicio es dueño de su propio schema y no toca los ajenos.
+# El clúster de RabbitMQ (2 nodos) vive en su propio archivo: es el mismo que corre en la nube.
+include:
+  - docker/rabbitmq/docker-compose.yml
+
 services:
   postgres:
     image: postgres:16.15-alpine

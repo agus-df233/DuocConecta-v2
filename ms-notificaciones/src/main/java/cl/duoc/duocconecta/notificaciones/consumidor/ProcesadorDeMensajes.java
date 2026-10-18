@@ -21,21 +21,28 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * La tabla de decisiones de confirmación, en un solo lugar. Todos los consumidores confirman a
- * mano ({@code acknowledgementMode = "MANUAL"}) y delegan aquí:
+ * La tabla de decisiones de confirmación, en un solo lugar y para los dos brokers. Todos los
+ * consumidores confirman a mano (SQS: {@code acknowledgementMode = "MANUAL"}; RabbitMQ:
+ * {@code ackMode = "MANUAL"}) y delegan aquí. Cada broker cumple la decisión con su
+ * {@link Confirmacion}:
  *
  * <table>
- *   <tr><th>Caso</th><th>Acción</th><th>Log</th></tr>
- *   <tr><td>Procesado</td><td>{@code acknowledge()}</td><td>INFO</td></tr>
- *   <tr><td>Duplicado (ya en {@code evento_procesado})</td><td>{@code acknowledge()} sin volver a actuar</td><td>INFO</td></tr>
- *   <tr><td>Error recuperable (base caída, timeout)</td><td>Sin ack y más visibilidad (backoff).
- *       SQS lo reentrega; a la recepción {@code maxRecepciones} la redrive lo lleva a la DLQ</td><td>WARN</td></tr>
+ *   <tr><th>Caso</th><th>Decisión</th><th>SQS</th><th>RabbitMQ</th><th>Log</th></tr>
+ *   <tr><td>Procesado</td><td>confirmar</td><td>{@code acknowledge()}</td><td>{@code basicAck}</td><td>INFO</td></tr>
+ *   <tr><td>Duplicado (ya en {@code evento_procesado})</td><td>confirmar sin volver a actuar</td>
+ *       <td>{@code acknowledge()}</td><td>{@code basicAck}</td><td>INFO</td></tr>
+ *   <tr><td>Error recuperable (base caída, timeout)</td><td>reintentar</td>
+ *       <td>sin ack, más visibilidad; a la 3.ª recepción la redrive lo lleva a la DLQ</td>
+ *       <td>{@code basicNack(requeue)}; al pasar {@code x-delivery-limit} va al DLX</td><td>WARN</td></tr>
  *   <tr><td>No recuperable (JSON inválido, sin {@code idEvento} o {@code tipo}, versión no soportada)</td>
- *       <td>Copia a la DLQ con el motivo y {@code acknowledge()}: el "NACK sin reencolar"</td><td>ERROR</td></tr>
+ *       <td>descartar: el "NACK sin reencolar"</td><td>copia a la DLQ + {@code acknowledge()}</td>
+ *       <td>{@code basicNack} sin reencolar → DLX</td><td>ERROR</td></tr>
  * </table>
  *
  * <p>El registro de procesados y la acción van en la misma transacción: si la acción falla, el
- * registro se revierte y el reintento vuelve a procesar.</p>
+ * registro se revierte y el reintento vuelve a procesar. Como SQS y RabbitMQ entregan el mismo
+ * evento, el registro también evita que se procese dos veces: el segundo broker en llegar
+ * encuentra el evento ya procesado y solo confirma.</p>
  */
 @Component
 public class ProcesadorDeMensajes {
@@ -66,7 +73,7 @@ public class ProcesadorDeMensajes {
     }
 
     /**
-     * Procesa un mensaje y decide su confirmación.
+     * Procesa un mensaje de SQS y decide su confirmación.
      *
      * @param consumidor nombre del consumidor, parte de la clave de idempotencia
      * @param claveCola  clave lógica de la cola en {@code duocconecta.mensajeria.colas}
@@ -76,6 +83,18 @@ public class ProcesadorDeMensajes {
     public void procesar(String consumidor, String claveCola, String cuerpo, String idPeticion,
                          String intento, Acknowledgement ack, Visibility visibilidad,
                          Consumer<EventoDuocConecta> accion) {
+        Confirmacion sqs = new ConfirmacionSqs(ack, visibilidad, envioADescarte, claveCola, cuerpo, idPeticion,
+                propiedades.getParametros().getMaxRecepciones(), propiedades.descarte(claveCola));
+        procesar(consumidor, cuerpo, idPeticion, intento, sqs, accion);
+    }
+
+    /**
+     * Procesa un mensaje de cualquier broker y le pide a su {@link Confirmacion} lo que corresponde.
+     *
+     * @param intento número de entrega (1 = la primera)
+     */
+    public void procesar(String consumidor, String cuerpo, String idPeticion, String intento,
+                         Confirmacion confirmacion, Consumer<EventoDuocConecta> accion) {
         MDC.put(AtributosMensaje.CLAVE_MDC, idPeticion == null || idPeticion.isBlank() ? "sin-id" : idPeticion);
         try {
             EventoDuocConecta evento = leer(cuerpo);
@@ -84,27 +103,31 @@ public class ProcesadorDeMensajes {
                 if (procesados.existsById(clave)) {
                     return false;
                 }
-                procesados.save(new EventoProcesado(clave, Instant.now()));
+                // Flush antes de actuar: si el otro broker entrega el mismo evento a la vez, su
+                // INSERT espera al nuestro y choca con la PK ANTES de ejecutar la acción. Con un
+                // save sin flush, el choque llegaba recién al commit y la acción corría dos veces.
+                procesados.saveAndFlush(new EventoProcesado(clave, Instant.now()));
                 if (permitirFallosSimulados && DETALLE_FALLO_SIMULADO.equals(evento.detalle())) {
                     throw new IllegalStateException("Fallo recuperable simulado para la demo");
                 }
                 accion.accept(evento);
                 return true;
             }));
-            ack.acknowledge();
+            confirmacion.confirmar();
             if (procesado) {
                 log.info("{}: evento {} '{}' procesado", consumidor, evento.idEvento(), evento.tipo());
             } else {
                 log.info("{}: evento {} repetido, se confirma sin volver a procesarlo", consumidor, evento.idEvento());
             }
         } catch (DataIntegrityViolationException carrera) {
-            // Dos entregas del mismo mensaje al mismo tiempo: la PK rechazó la segunda.
-            ack.acknowledge();
+            // Dos entregas del mismo evento al mismo tiempo (por ejemplo, una de cada broker):
+            // la PK rechazó la segunda.
+            confirmacion.confirmar();
             log.info("{}: entrega duplicada concurrente, se confirma", consumidor);
         } catch (EventoNoProcesableException noProcesable) {
-            descartar(consumidor, claveCola, cuerpo, noProcesable.getMessage(), idPeticion, ack);
+            descartar(consumidor, noProcesable.getMessage(), confirmacion);
         } catch (RuntimeException recuperable) {
-            reintentar(consumidor, recuperable, intento, visibilidad);
+            reintentar(consumidor, recuperable, intento, confirmacion);
         } finally {
             MDC.remove(AtributosMensaje.CLAVE_MDC);
         }
@@ -127,37 +150,33 @@ public class ProcesadorDeMensajes {
         return evento;
     }
 
-    /** No recuperable: a la DLQ de inmediato. Si ni eso funciona, se deja para la redrive. */
-    private void descartar(String consumidor, String claveCola, String cuerpo, String motivo,
-                           String idPeticion, Acknowledgement ack) {
+    /** No recuperable: a la DLQ de inmediato. Si ni eso funciona, se deja para que el broker lo reintente. */
+    private void descartar(String consumidor, String motivo, Confirmacion confirmacion) {
         try {
-            envioADescarte.enviar(claveCola, cuerpo, motivo, idPeticion);
-            ack.acknowledge();
-            log.error("{}: mensaje no procesable enviado a {}. Motivo: {}", consumidor,
-                    propiedades.descarte(claveCola), motivo);
+            confirmacion.descartar(motivo);
+            log.error("{}: mensaje no procesable enviado a {}. Motivo: {}", consumidor, confirmacion.dlq(), motivo);
         } catch (Exception envioFallido) {
-            log.error("{}: no se pudo copiar a la DLQ ({}); queda para la redrive. Motivo original: {}",
+            log.error("{}: no se pudo mandar a la DLQ ({}); queda para la redrive. Motivo original: {}",
                     consumidor, envioFallido.getMessage(), motivo);
         }
     }
 
-    /** Recuperable: sin ack, con más visibilidad en cada intento. SQS lo vuelve a entregar. */
-    private void reintentar(String consumidor, RuntimeException error, String intento, Visibility visibilidad) {
-        int numero = intento == null ? 1 : Integer.parseInt(intento);
-        int maximo = propiedades.getParametros().getMaxRecepciones();
-        if (numero >= maximo) {
-            log.warn("{}: intento {} de {} fallido ({}). SQS lo moverá a la DLQ al vencer la visibilidad",
-                    consumidor, numero, maximo, error.getMessage());
-            return;
-        }
-        int espera = Math.min(10 * numero, 60);
+    /** Recuperable: sin ack. El broker lo vuelve a entregar y, al agotar las entregas, lo manda a la DLQ. */
+    private void reintentar(String consumidor, RuntimeException error, String intento, Confirmacion confirmacion) {
+        int numero = intento == null || intento.isBlank() ? 1 : Integer.parseInt(intento);
+        int maximo = confirmacion.maxEntregas();
+        int espera = numero >= maximo ? 0 : Math.min(10 * numero, 60);
         try {
-            visibilidad.changeTo(espera);
+            confirmacion.reintentar(espera);
         } catch (RuntimeException sinCambio) {
-            log.warn("{}: no se pudo ajustar la visibilidad: {}", consumidor, sinCambio.getMessage());
+            log.warn("{}: no se pudo pedir el reintento: {}", consumidor, sinCambio.getMessage());
         }
-        log.warn("{}: intento {} de {} fallido ({}). Se reintenta en {} s", consumidor, numero, maximo,
-                error.getMessage(), espera);
+        if (numero >= maximo) {
+            log.warn("{}: intento {} de {} fallido ({}). El broker lo moverá a {}",
+                    consumidor, numero, maximo, error.getMessage(), confirmacion.dlq());
+        } else {
+            log.warn("{}: intento {} de {} fallido ({}). Se reintenta", consumidor, numero, maximo, error.getMessage());
+        }
     }
 
     private static boolean vacio(String texto) {

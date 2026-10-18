@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Consume {@code colaboracion.*}: avisa a quien recibe una solicitud y a quien la pidió cuando se
- * responde. El correo real queda para la EP3 (SES en el lab solo envía a direcciones verificadas).
+ * responde, y a quien la recibió si se la retiran. El correo real queda para la EP3 (SES en el lab solo envía a direcciones verificadas).
  */
 @Component
 public class ConsumidorColaboraciones {
@@ -50,6 +50,7 @@ public class ConsumidorColaboraciones {
             case TiposDeEvento.COLABORACION_SOLICITADA -> "Tienes una nueva solicitud de colaboración";
             case TiposDeEvento.COLABORACION_ACEPTADA -> "Aceptaron tu solicitud de colaboración";
             case TiposDeEvento.COLABORACION_RECHAZADA -> "Rechazaron tu solicitud de colaboración";
+            case TiposDeEvento.COLABORACION_RETIRADA -> "Retiraron una solicitud de colaboración que te enviaron";
             default -> null;
         };
         if (titulo == null) {

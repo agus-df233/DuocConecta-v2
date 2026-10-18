@@ -73,6 +73,19 @@ class TablaDeConfirmacionTests {
     }
 
     @Test
+    @DisplayName("Retirada: avisa a quien recibió la solicitud y confirma")
+    void retiradaAvisaAQuienLaRecibio() {
+        String id = UUID.randomUUID().toString();
+        Acknowledgement ack = mock(Acknowledgement.class);
+
+        colaboraciones.recibir(evento(id, "colaboracion.retirada", "oid-a", "oid-b", null), null, "1",
+                ack, mock(Visibility.class));
+
+        verify(ack).acknowledge();
+        assertThat(avisos.countByIdEvento(id)).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("Duplicado: el mismo idEvento dos veces da un solo aviso, y ambos se confirman")
     void duplicadoSeConfirmaSinRepetir() {
         String id = UUID.randomUUID().toString();

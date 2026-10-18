@@ -22,13 +22,14 @@ public final class TiposDeEvento {
     public static final String COLABORACION_SOLICITADA = "colaboracion.solicitada";
     public static final String COLABORACION_ACEPTADA = "colaboracion.aceptada";
     public static final String COLABORACION_RECHAZADA = "colaboracion.rechazada";
+    public static final String COLABORACION_RETIRADA = "colaboracion.retirada";
 
     /** Todos los tipos conocidos: un consumidor descarta como no recuperable lo que no esté aquí. */
     public static final Set<String> CONOCIDOS = Set.of(
             PROYECTO_PUBLICADO, PROYECTO_ACTUALIZADO, PROYECTO_ELIMINADO, PROYECTO_COMENTADO,
             PROYECTO_COLABORADOR_AGREGADO, PROYECTO_OCULTADO, PROYECTO_RESTAURADO,
             PROYECTO_COMENTARIO_ELIMINADO,
-            COLABORACION_SOLICITADA, COLABORACION_ACEPTADA, COLABORACION_RECHAZADA);
+            COLABORACION_SOLICITADA, COLABORACION_ACEPTADA, COLABORACION_RECHAZADA, COLABORACION_RETIRADA);
 
     private TiposDeEvento() {
     }

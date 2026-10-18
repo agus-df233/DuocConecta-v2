@@ -14,6 +14,7 @@ import cl.duoc.duocconecta.mensajeria.dto.SuscripcionRespuesta;
 import cl.duoc.duocconecta.mensajeria.dto.TopicoRespuesta;
 import cl.duoc.duocconecta.mensajeria.exception.ConflictoDeEstadoException;
 import cl.duoc.duocconecta.mensajeria.exception.RecursoNoEncontradoException;
+import cl.duoc.duocconecta.mensajeria.exception.SolicitudInvalidaException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -80,6 +81,7 @@ public class ServicioAdministracionColas {
 
     /** @throws software.amazon.awssdk.services.sqs.model.QueueDoesNotExistException si no existe (404) */
     public ColaRespuesta detalleCola(String nombre) {
+        exigirDeLaPlataforma(nombre);
         String url = provisionador.url(nombre);
         Map<QueueAttributeName, String> a = clienteSqs.getQueueAttributes(r -> r.queueUrl(url)
                 .attributeNames(QueueAttributeName.ALL)).attributes();
@@ -126,6 +128,7 @@ public class ServicioAdministracionColas {
 
     /** Elimina una cola. SQS tarda hasta 60 s en liberar el nombre. */
     public void eliminarCola(String nombre) {
+        exigirDeLaPlataforma(nombre);
         exigirNoProtegida(nombre, colasProtegidas.contains(nombre));
         String url = provisionador.url(nombre);
         clienteSqs.deleteQueue(r -> r.queueUrl(url));
@@ -134,6 +137,7 @@ public class ServicioAdministracionColas {
 
     /** Vacía la cola. SQS permite una purga por minuto. */
     public void purgarCola(String nombre) {
+        exigirDeLaPlataforma(nombre);
         String url = provisionador.url(nombre);
         try {
             clienteSqs.purgeQueue(r -> r.queueUrl(url));
@@ -145,6 +149,7 @@ public class ServicioAdministracionColas {
 
     /** Devuelve los mensajes de una DLQ a su cola de origen, una vez corregida la causa. */
     public RedriveRespuesta redrive(String nombreDescarte) {
+        exigirDeLaPlataforma(nombreDescarte);
         String url = provisionador.url(nombreDescarte);
         boolean esDescarte = !clienteSqs.listDeadLetterSourceQueues(r -> r.queueUrl(url)).queueUrls().isEmpty();
         if (!esDescarte) {
@@ -263,6 +268,14 @@ public class ServicioAdministracionColas {
 
     private boolean esTopicoProtegido(String nombre) {
         return nombre.equals(propiedades.getTopico().getNombre());
+    }
+
+    /** La API solo toca colas de la plataforma: una cola ajena de la cuenta queda fuera de su alcance. */
+    private static void exigirDeLaPlataforma(String nombre) {
+        if (nombre == null || !nombre.startsWith(PREFIJO)) {
+            throw new SolicitudInvalidaException("Solo se administran colas con el prefijo " + PREFIJO
+                    + ": " + nombre + " no es de la plataforma");
+        }
     }
 
     private static void exigirNoProtegida(String recurso, boolean protegida) {

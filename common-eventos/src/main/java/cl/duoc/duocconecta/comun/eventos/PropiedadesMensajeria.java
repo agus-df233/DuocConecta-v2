@@ -43,6 +43,9 @@ public class PropiedadesMensajeria {
 
     private Parametros parametros = new Parametros();
 
+    /** El segundo broker. Los mismos eventos, con exchanges, colas y bindings de RabbitMQ. */
+    private Rabbit rabbit = new Rabbit();
+
     /** El nombre real de una cola de trabajo; falla con un mensaje claro si falta en el YAML. */
     public String cola(String clave) {
         return obligatorio(colas, clave, "colas");
@@ -221,6 +224,111 @@ public class PropiedadesMensajeria {
 
     public void setNoEntregados(String noEntregados) {
         this.noEntregados = noEntregados;
+    }
+
+    public Rabbit getRabbit() {
+        return rabbit;
+    }
+
+    public void setRabbit(Rabbit rabbit) {
+        this.rabbit = rabbit;
+    }
+
+    /**
+     * Topología de RabbitMQ. Las claves lógicas (proyectos, colaboraciones, auditoria) son las
+     * mismas que las de SQS: así un consumidor sabe a qué cola escuchar en cada broker.
+     */
+    public static class Rabbit {
+
+        /** En falso no se publica ni se consume en RabbitMQ. Los tests lo usan así. */
+        private boolean habilitada = false;
+
+        /** Exchange topic donde se publica cada evento, con su tipo como routing key. */
+        private String exchange;
+
+        /** Exchange direct que recibe lo rechazado y lo reparte a cada DLQ. */
+        private String dlx;
+
+        /** Clave lógica → nombre de la cola de trabajo. */
+        private Map<String, String> colas = new LinkedHashMap<>();
+
+        /** Clave lógica → nombre de su DLQ (también es la routing key hacia el DLX). */
+        private Map<String, String> descartes = new LinkedHashMap<>();
+
+        /** Clave lógica → patrón del binding, por ejemplo {@code proyecto.#}. */
+        private Map<String, String> bindings = new LinkedHashMap<>();
+
+        /** Entregas antes de que la cola quorum mande el mensaje al DLX ({@code x-delivery-limit}). */
+        private int maxEntregas = 3;
+
+        /** El nombre real de una cola de trabajo; falla con un mensaje claro si falta en el YAML. */
+        public String cola(String clave) {
+            return obligatorio(colas, clave, "rabbit.colas");
+        }
+
+        public String descarte(String clave) {
+            return obligatorio(descartes, clave, "rabbit.descartes");
+        }
+
+        public String binding(String clave) {
+            return obligatorio(bindings, clave, "rabbit.bindings");
+        }
+
+        public boolean isHabilitada() {
+            return habilitada;
+        }
+
+        public void setHabilitada(boolean habilitada) {
+            this.habilitada = habilitada;
+        }
+
+        public String getExchange() {
+            return exchange;
+        }
+
+        public void setExchange(String exchange) {
+            this.exchange = exchange;
+        }
+
+        public String getDlx() {
+            return dlx;
+        }
+
+        public void setDlx(String dlx) {
+            this.dlx = dlx;
+        }
+
+        public Map<String, String> getColas() {
+            return colas;
+        }
+
+        public void setColas(Map<String, String> colas) {
+            this.colas = colas;
+        }
+
+        public Map<String, String> getDescartes() {
+            return descartes;
+        }
+
+        public void setDescartes(Map<String, String> descartes) {
+            this.descartes = descartes;
+        }
+
+        public Map<String, String> getBindings() {
+            return bindings;
+        }
+
+        public void setBindings(Map<String, String> bindings) {
+            this.bindings = bindings;
+        }
+
+        public int getMaxEntregas() {
+            return maxEntregas;
+        }
+
+        public void setMaxEntregas(int maxEntregas) {
+            this.maxEntregas = maxEntregas;
+        }
     }
 
     public Parametros getParametros() {

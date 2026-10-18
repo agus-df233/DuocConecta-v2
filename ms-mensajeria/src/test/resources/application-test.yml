@@ -15,3 +15,15 @@ duocconecta:
       duocuc.cl: ESTUDIANTE
       profesor.duoc.cl: PROFESOR
       duoc.cl: ACADEMICO
+
+# RabbitMQ apagado en los tests: no hace falta un broker para que el contexto levante.
+---
+spring:
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+duocconecta:
+  mensajeria:
+    rabbit:
+      habilitada: false

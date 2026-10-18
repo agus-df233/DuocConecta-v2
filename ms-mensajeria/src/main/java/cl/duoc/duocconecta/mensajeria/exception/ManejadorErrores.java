@@ -46,6 +46,21 @@ public class ManejadorErrores extends ManejadorErroresBase {
         return problema(HttpStatus.BAD_GATEWAY, "AWS rechazó la operación", excepcion.getMessage());
     }
 
+    /** RabbitMQ no responde: el broker está caído o no se alcanza. */
+    @ExceptionHandler(org.springframework.amqp.AmqpConnectException.class)
+    public ProblemDetail manejarSinRabbit(RuntimeException excepcion) {
+        log.warn("RabbitMQ no disponible: {}", excepcion.getMessage());
+        return problema(HttpStatus.SERVICE_UNAVAILABLE, "RabbitMQ no disponible",
+                "No se pudo conectar con RabbitMQ. Revisa que el clúster esté arriba.");
+    }
+
+    /** RabbitMQ rechazó la operación (por ejemplo, declarar una cola que existe con otros argumentos). */
+    @ExceptionHandler(org.springframework.amqp.AmqpException.class)
+    public ProblemDetail manejarRabbit(RuntimeException excepcion) {
+        log.warn("RabbitMQ rechazó la operación: {}", excepcion.getMessage());
+        return problema(HttpStatus.BAD_GATEWAY, "RabbitMQ rechazó la operación", excepcion.getMessage());
+    }
+
     /** Sin red o sin credenciales: en el Learner Lab vencen en cada sesión. */
     @ExceptionHandler(SdkClientException.class)
     public ProblemDetail manejarSinAws(SdkClientException excepcion) {

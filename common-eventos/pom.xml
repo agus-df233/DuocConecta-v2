@@ -17,7 +17,7 @@
 
     <artifactId>common-eventos</artifactId>
     <name>common-eventos</name>
-    <description>Contrato de eventos, publicación en SNS y topología de SQS de DuocConecta</description>
+    <description>Contrato de eventos, publicación en SNS y RabbitMQ, y topología de SQS de DuocConecta</description>
 
     <dependencies>
         <dependency>
@@ -46,6 +46,12 @@
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>sqs</artifactId>
+        </dependency>
+
+        <!-- RabbitMQ (EP2): el segundo broker. Publica los mismos eventos que SNS. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
         </dependency>
 
         <dependency>

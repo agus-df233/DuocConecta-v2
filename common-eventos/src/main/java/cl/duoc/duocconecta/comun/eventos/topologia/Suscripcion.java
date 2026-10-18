@@ -1,5 +1,7 @@
 package cl.duoc.duocconecta.comun.eventos.topologia;
 
+import cl.duoc.duocconecta.comun.eventos.AtributosMensaje;
+
 /**
  * Une una cola a un tópico: el equivalente del binding de RabbitMQ.
  *
@@ -11,6 +13,6 @@ public record Suscripcion(String topico, String cola, String filtroPrefijo, Stri
     /** Política de filtro sobre el atributo {@code tipo}, o nula si no filtra. */
     public String politicaDeFiltro() {
         return filtroPrefijo == null ? null
-                : "{\"tipo\":[{\"prefix\":\"" + filtroPrefijo + "\"}]}";
+                : "{\"" + AtributosMensaje.TIPO + "\":[{\"prefix\":\"" + filtroPrefijo + "\"}]}";
     }
 }
