@@ -1185,7 +1185,16 @@ cmd_rabbitmq() {
   if [[ -z "$id" ]]; then
     ami=$(aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
       --query Parameter.Value --output text)
-    subnet=$(echo "$SUBNETS" | cut -d, -f1)
+    # Una subred en una zona que ofrezca t3.small: no todas lo tienen (us-east-1e no), y tomar la
+    # primera subred hacía fallar el run-instances según la cuenta.
+    local zonas
+    zonas=" $(aws ec2 describe-instance-type-offerings --location-type availability-zone \
+      --filters Name=instance-type,Values=t3.small --query 'InstanceTypeOfferings[].Location' \
+      --output text | tr '\t' ' ') "
+    subnet=$(aws ec2 describe-subnets --subnet-ids ${SUBNETS//,/ } \
+      --query 'Subnets[].[SubnetId,AvailabilityZone]' --output text \
+      | while read -r sid zona; do [[ "$zonas" == *" $zona "* ]] && echo "$sid" && break; done)
+    [[ -z "$subnet" ]] && { falla "Ninguna subred está en una zona que ofrezca t3.small"; exit 1; }
     local datos; datos=$(mktemp)
     # Los mismos archivos del repositorio: lo que corre en la nube es lo que se prueba en local.
     cat > "$datos" <<EOU
