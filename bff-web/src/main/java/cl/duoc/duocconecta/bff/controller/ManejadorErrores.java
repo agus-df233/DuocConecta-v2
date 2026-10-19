@@ -1,5 +1,6 @@
 package cl.duoc.duocconecta.bff.controller;
 
+import cl.duoc.duocconecta.bff.service.ColaboracionNoPermitidaException;
 import cl.duoc.duocconecta.comun.seguridad.ManejadorErroresBase;
 import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
@@ -27,6 +28,12 @@ public class ManejadorErrores extends ManejadorErroresBase {
 
     public ManejadorErrores(ObjectMapper json) {
         this.json = json;
+    }
+
+    /** Una solicitud que no tiene sentido, como pedir colaborar en un proyecto abierto: 400. */
+    @ExceptionHandler(ColaboracionNoPermitidaException.class)
+    public ProblemDetail manejarColaboracionNoPermitida(ColaboracionNoPermitidaException excepcion) {
+        return problema(HttpStatus.BAD_REQUEST, "Solicitud no válida", excepcion.getMessage());
     }
 
     /**

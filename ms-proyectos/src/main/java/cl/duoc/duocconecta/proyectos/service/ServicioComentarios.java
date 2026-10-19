@@ -53,8 +53,11 @@ public class ServicioComentarios {
 
         Comentario guardado = repositorioComentarios.save(comentario);
         // Se avisa a la dueña del proyecto; si comenta ella misma, el consumidor no se avisa a sí mismo.
+        // Un proyecto abierto no tiene a quién avisar: es de la plataforma. El evento sale igual, para
+        // la auditoría, pero sin destinatario.
+        String destinatario = proyecto.isAbierto() ? null : proyecto.getPropietarioId();
         eventos.publishEvent(EventoDuocConecta.nuevo(TiposDeEvento.PROYECTO_COMENTADO, usuarioId,
-                proyecto.getPropietarioId(), guardado.getId().toString(), proyectoId.toString(), null));
+                destinatario, guardado.getId().toString(), proyectoId.toString(), null));
         return ComentarioRespuesta.desdeEntidad(guardado);
     }
 

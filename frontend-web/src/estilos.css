@@ -490,6 +490,8 @@ main:has(.columnas) { max-width: 1400px; }
 .insignia.oculto         { background: var(--crema); color: var(--ocre); border: 1px solid var(--crema-borde); }
 .insignia.propio         { background: #E8EFFA; color: var(--azul-claro); }
 .insignia.moderado       { background: var(--rojo-fondo); color: var(--rojo-texto); border: 1px solid #F2C4B8; }
+/* Proyecto abierto: lo publica DuocConecta, se comenta y no recibe solicitudes. */
+.insignia.abierto        { background: var(--azul-fondo); color: var(--azul); border: 1px solid var(--azul-borde); }
 
 /* "Nuevo": lo que llegó con el feed en vivo o se acaba de escribir. */
 .insignia-nuevo {
@@ -967,3 +969,9 @@ label .ayuda { font-weight: 400; }
   .panel-flotante.accesibilidad,
   .panel-flotante.angosto { width: auto; }
 }
+
+/* ======================================================================= Proyectos abiertos */
+/* El avatar de un proyecto abierto es la marca, no las iniciales de una persona. */
+.iniciales.plataforma { background: var(--azul); display: flex; align-items: center; justify-content: center; }
+.iniciales.plataforma .logo { width: 13px; height: 13px; border-radius: 4px 1px 4px 1px; background: var(--amarillo); }
+.nota-abierto { background: var(--azul-fondo); border: 1px solid var(--azul-borde); border-radius: 9px; padding: 9px 12px; margin: 0 0 4px; }

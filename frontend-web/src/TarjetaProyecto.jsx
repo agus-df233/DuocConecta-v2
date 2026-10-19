@@ -1,5 +1,6 @@
 // Una tarjeta de la vitrina: lo justo para decidir si vale la pena abrirla.
-// El detalle completo va en el panel lateral.
+// El detalle completo va en el panel lateral. Un proyecto abierto (publicado por DuocConecta) se
+// puede comentar, pero no tiene botón de colaborar.
 import { ESTADOS, iniciales, fechaRelativa, TEXTO_SOLICITUD } from './catalogo'
 
 export default function TarjetaProyecto({
@@ -30,6 +31,7 @@ export default function TarjetaProyecto({
       <div className="etiquetas">
         <span className={`insignia ${proyecto.estado}`}>{ESTADOS[proyecto.estado] ?? proyecto.estado}</span>
         {esNuevo && <span className="insignia-nuevo">Nuevo</span>}
+        {proyecto.abierto && <span className="insignia abierto">Abierto · solo comentarios</span>}
         {esMio && <span className="insignia propio">Tuyo</span>}
         {esMio && oculto && <span className="insignia oculto">Fuera de la vitrina</span>}
         <span className="fecha">{fechaRelativa(proyecto.fechaCreacion)}</span>
@@ -45,18 +47,21 @@ export default function TarjetaProyecto({
       )}
 
       <div className="pie-autor">
-        <div className="iniciales" aria-hidden="true">{iniciales(autor.nombre)}</div>
+        {proyecto.abierto
+          ? <div className="iniciales plataforma" aria-hidden="true"><span className="logo" /></div>
+          : <div className="iniciales" aria-hidden="true">{iniciales(autor.nombre)}</div>}
         <div className="quien">
-          <strong>{autor.nombre ?? 'Alguien de la comunidad'}</strong>
+          <strong>{proyecto.abierto ? 'Publicado por DuocConecta' : (autor.nombre ?? 'Alguien de la comunidad')}</strong>
           <span>{[autor.carrera, proyecto.sede ?? autor.sede].filter(Boolean).join(' · ')}</span>
         </div>
         <span className="comentarios" aria-label={`${comentarios} comentarios`}>{comentarios} com.</span>
       </div>
 
       <div className="acciones">
-        {esMio ? (
+        {esMio && (
           <button type="button" className="secundario crece" onClick={soloEsto(alEditar)}>Editar</button>
-        ) : (
+        )}
+        {!esMio && !proyecto.abierto && (
           <button
             type="button"
             className="principal crece"

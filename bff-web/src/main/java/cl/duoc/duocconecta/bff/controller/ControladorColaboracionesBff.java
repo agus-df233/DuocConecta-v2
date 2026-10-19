@@ -5,6 +5,8 @@ import cl.duoc.duocconecta.bff.dto.PerfilUsuario;
 import cl.duoc.duocconecta.bff.dto.DecisionColaboracion;
 import cl.duoc.duocconecta.bff.dto.SolicitudColaboracionDatos;
 import cl.duoc.duocconecta.bff.service.ClienteContacto;
+import cl.duoc.duocconecta.bff.service.ColaboracionNoPermitidaException;
+import cl.duoc.duocconecta.bff.service.ClienteProyectos;
 import cl.duoc.duocconecta.comun.seguridad.UsuarioActual;
 import cl.duoc.duocconecta.bff.dto.DatosDeContacto;
 import cl.duoc.duocconecta.bff.service.ResolvedorAutores;
@@ -53,16 +55,19 @@ public class ControladorColaboracionesBff {
     private static final int LARGO_MAXIMO_DATOS = 500;
 
     private final ClienteContacto clienteContacto;
+    private final ClienteProyectos clienteProyectos;
     private final ClienteUsuarios clienteUsuarios;
     private final ResolvedorAutores resolvedorAutores;
     private final ResolvedorProyectos resolvedorProyectos;
     private final UsuarioActual usuarioActual;
 
-    public ControladorColaboracionesBff(ClienteContacto clienteContacto, ClienteUsuarios clienteUsuarios,
+    public ControladorColaboracionesBff(ClienteContacto clienteContacto, ClienteProyectos clienteProyectos,
+                                       ClienteUsuarios clienteUsuarios,
                                        ResolvedorAutores resolvedorAutores,
                                        ResolvedorProyectos resolvedorProyectos,
                                        UsuarioActual usuarioActual) {
         this.clienteContacto = clienteContacto;
+        this.clienteProyectos = clienteProyectos;
         this.clienteUsuarios = clienteUsuarios;
         this.resolvedorAutores = resolvedorAutores;
         this.resolvedorProyectos = resolvedorProyectos;
@@ -75,7 +80,7 @@ public class ControladorColaboracionesBff {
             description = "Queda PENDIENTE hasta que la otra parte responda. No se comparte ningún dato todavía.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Solicitud enviada"),
-            @ApiResponse(responseCode = "400", description = "Solicitud a uno mismo", content = @Content),
+            @ApiResponse(responseCode = "400", description = "Solicitud a uno mismo, o a un proyecto abierto", content = @Content),
             @ApiResponse(responseCode = "409", description = "Ya hay una solicitud pendiente a esa persona", content = @Content),
             @ApiResponse(responseCode = "401", description = "Falta el token o no es válido", content = @Content)
     })
@@ -83,6 +88,12 @@ public class ControladorColaboracionesBff {
     @PreAuthorize(ROLES_DE_LA_PLATAFORMA)
     public ResponseEntity<ColaboracionRespuesta> solicitar(
             @Valid @RequestBody SolicitudColaboracionDatos solicitud) {
+        // Los proyectos abiertos los publica el administrador para la vitrina: se comentan, pero no
+        // tienen a quién compartirle un contacto. ms-contacto no conoce los proyectos; lo revisa el BFF.
+        if (solicitud.proyectoId() != null && clienteProyectos.esAbierto(solicitud.proyectoId())) {
+            throw new ColaboracionNoPermitidaException(
+                    "Los proyectos abiertos se pueden comentar, pero no reciben solicitudes de colaboración.");
+        }
         // Pedir contacto es ofrecer el propio: se adjuntan los datos de quien pide. No se muestran
         // a nadie mientras la solicitud siga pendiente.
         DatosDeContacto mios = datosDeContactoPropios(solicitud.compartirTelefono());

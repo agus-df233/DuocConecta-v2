@@ -55,7 +55,7 @@ public class ServicioProyectos {
      * Los archivos que ya no están en la lista se borran del bucket: si no, cada edición dejaría
      * basura acumulándose.</p>
      */
-    private void sincronizarAdjuntos(Proyecto proyecto, List<AdjuntoDatos> entrantes) {
+    void sincronizarAdjuntos(Proyecto proyecto, List<AdjuntoDatos> entrantes) {
         if (entrantes == null) {
             return;
         }
@@ -154,6 +154,10 @@ public class ServicioProyectos {
         if (!proyecto.getPropietarioId().equals(usuarioId)) {
             throw new OperacionNoPermitidaException("Solo el propietario puede editar este proyecto");
         }
+        // Un proyecto abierto lleva carrera y no admite visibilidad: tiene su propio formulario.
+        if (proyecto.isAbierto()) {
+            throw new ConflictoDeEstadoException("Los proyectos abiertos se editan desde Administración.");
+        }
 
         proyecto.setNombre(dto.nombre());
         proyecto.setResumen(dto.resumen());
@@ -182,6 +186,9 @@ public class ServicioProyectos {
 
         if (!repo.getPropietarioId().equals(usuarioId)) {
             throw new OperacionNoPermitidaException("Solo el propietario puede agregar colaboradores.");
+        }
+        if (repo.isAbierto()) {
+            throw new ConflictoDeEstadoException("Los proyectos abiertos no tienen colaboradores.");
         }
         if (repo.getVisibilidad() != Visibilidad.COMPARTIDO) {
             throw new OperacionNoPermitidaException("Solo se pueden agregar colaboradores a proyectos compartidos");

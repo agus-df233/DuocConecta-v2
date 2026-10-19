@@ -332,7 +332,8 @@ function MisProyectos({ alAvisar, alFallar }) {
   }
 
   const mios = useMemo(
-    () => (todos ?? []).filter((p) => p.propietarioId === miOid),
+    // Los abiertos no son "míos" aunque los haya subido el administrador: se ven como de DuocConecta.
+    () => (todos ?? []).filter((p) => p.propietarioId === miOid && !p.abierto),
     [todos, miOid])
 
   const cambiarVisibilidad = async (proyecto) => {

@@ -40,18 +40,24 @@ public class ServicioAdministracion {
         Vitrina vitrina = new Vitrina(proyectos.total(), proyectos.enVitrina(), proyectos.ocultosPorModeracion(),
                 proyectos.publicadosUltimos30Dias(), proyectos.comentarios(),
                 lista(proyectos.porVisibilidad()), lista(proyectos.porEstado()), lista(proyectos.porSede()),
-                porCarrera(lista(proyectos.porPropietario())));
+                porCarrera(lista(proyectos.porPropietario()), lista(proyectos.porCarreraAbiertos())));
         return new ResumenAdministracionRespuesta(comunidad, vitrina);
     }
 
-    /** Suma los proyectos de cada dueña en su carrera. Una consulta a ms-usuarios por persona. */
-    private List<Conteo> porCarrera(List<Conteo> porPropietario) {
+    /**
+     * Suma los proyectos de cada dueña en su carrera, una consulta a ms-usuarios por persona, y les
+     * agrega los proyectos abiertos, que ya vienen contados por la carrera que eligió el administrador.
+     */
+    private List<Conteo> porCarrera(List<Conteo> porPropietario, List<Conteo> abiertosPorCarrera) {
         ResolvedorAutores.Consulta consulta = resolvedorAutores.abrir();
         Map<String, Long> suma = new LinkedHashMap<>();
         for (Conteo propietario : porPropietario) {
             String carrera = consulta.autorDe(propietario.clave()).carrera();
             String clave = carrera == null || carrera.isBlank() ? SIN_CARRERA : carrera;
             suma.merge(clave, propietario.cantidad(), Long::sum);
+        }
+        for (Conteo abierto : abiertosPorCarrera) {
+            suma.merge(abierto.clave(), abierto.cantidad(), Long::sum);
         }
         return suma.entrySet().stream()
                 .sorted(Map.Entry.<String, Long>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))

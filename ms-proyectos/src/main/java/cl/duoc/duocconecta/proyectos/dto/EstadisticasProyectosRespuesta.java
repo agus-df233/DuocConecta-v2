@@ -7,7 +7,9 @@ import java.util.List;
  * Cifras de la vitrina para el dashboard de administración.
  *
  * <p>{@code porPropietario} lleva el {@code oid} de cada dueña con su cantidad de proyectos: ms-proyectos
- * no sabe de carreras, así que el BFF lo cruza con ms-usuarios para contar por carrera.</p>
+ * no sabe de carreras, así que el BFF lo cruza con ms-usuarios para contar por carrera. Los proyectos
+ * abiertos no entran ahí, porque su dueño es el administrador: van en {@code porCarreraAbiertos}, con
+ * la carrera que eligió.</p>
  */
 @Schema(description = "Cantidad de proyectos y comentarios, en total y agrupados")
 public record EstadisticasProyectosRespuesta(
@@ -19,7 +21,9 @@ public record EstadisticasProyectosRespuesta(
         List<Conteo> porVisibilidad,
         List<Conteo> porEstado,
         List<Conteo> porSede,
-        List<Conteo> porPropietario) {
+        List<Conteo> porPropietario,
+        @Schema(description = "Proyectos abiertos publicados por el administrador", example = "8") long abiertos,
+        List<Conteo> porCarreraAbiertos) {
 
     /** Una barra del gráfico: la categoría y cuántos proyectos tiene. */
     @Schema(description = "Categoría y cantidad")

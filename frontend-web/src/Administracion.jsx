@@ -4,16 +4,19 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   comentariosParaModerar,
+  editarProyectoAbierto,
   eliminarComentarioModerado,
   eliminarProyectoModerado,
   mostrarProyecto,
   ocultarProyecto,
   proyectosParaModerar,
+  publicarProyectoAbierto,
   resumenAdministracion,
 } from './api'
 import Aviso, { useAviso } from './Aviso'
 import { ESTADOS, fechaCorta, fechaLarga } from './catalogo'
 import Confirmar from './Confirmar'
+import FormularioProyecto from './FormularioProyecto'
 import Ventana from './Ventana'
 
 const PESTANAS = [
@@ -124,7 +127,10 @@ function Barras({ titulo, conteos = [], etiquetas = {}, ayuda }) {
   )
 }
 
-/** Tabla de todos los proyectos con las acciones de moderación. */
+/**
+ * Tabla de todos los proyectos con las acciones de moderación. Desde aquí también se publican y
+ * editan los proyectos abiertos, los que muestra la vitrina como de DuocConecta.
+ */
 function ModerarProyectos() {
   const [filtros, setFiltros] = useState({ oculto: '', visibilidad: '' })
   const [proyectos, setProyectos] = useState(null)
@@ -132,11 +138,25 @@ function ModerarProyectos() {
   const { texto: mensaje, avisar } = useAviso()
   const [ocultando, setOcultando] = useState(null)
   const [eliminando, setEliminando] = useState(null)
+  const [editandoAbierto, setEditandoAbierto] = useState(null)   // null cerrado · {} nuevo · proyecto si edita
 
   const cargar = useCallback(() => {
     setError(null)
     proyectosParaModerar(filtros).then(setProyectos).catch((e) => setError(e.message))
   }, [filtros])
+
+  // El formulario se cierra solo si se guardó: con un error, sigue abierto para corregir.
+  const guardarAbierto = async (datos) => {
+    try {
+      if (editandoAbierto?.id) await editarProyectoAbierto(editandoAbierto.id, datos)
+      else await publicarProyectoAbierto(datos)
+      avisar(editandoAbierto?.id ? 'Proyecto abierto actualizado.' : 'Proyecto abierto publicado en la vitrina.')
+      setEditandoAbierto(null)
+      cargar()
+    } catch (e) {
+      setError(e.message)
+    }
+  }
 
   useEffect(() => { cargar() }, [cargar])
 
@@ -173,6 +193,9 @@ function ModerarProyectos() {
           {Object.entries(VISIBILIDADES).map(([valor, texto]) => <option key={valor} value={valor}>{texto}</option>)}
         </select>
         {proyectos && <span className="resumen"><strong>{proyectos.length}</strong> proyectos</span>}
+        <button type="button" className="principal" onClick={() => setEditandoAbierto({})}>
+          Publicar proyecto abierto
+        </button>
       </div>
 
       {error && <div className="error" role="alert">{error}</div>}
@@ -195,11 +218,12 @@ function ModerarProyectos() {
                   <td>{VISIBILIDADES[p.visibilidad] ?? p.visibilidad}</td>
                   <td>{fechaCorta(p.fechaCreacion)}</td>
                   <td>
-                    {p.oculto
-                      ? <span className="insignia moderado" title={p.motivoOcultamiento}>Oculto: {p.motivoOcultamiento}</span>
-                      : <span className="ayuda">Sin acciones</span>}
+                    {p.oculto && <span className="insignia moderado" title={p.motivoOcultamiento}>Oculto: {p.motivoOcultamiento}</span>}
+                    {p.abierto && <span className="insignia abierto" title={p.carrera}>Abierto · {p.carrera}</span>}
+                    {!p.oculto && !p.abierto && <span className="ayuda">Sin acciones</span>}
                   </td>
                   <td className="acciones-fila">
+                    {p.abierto && <button className="secundario" onClick={() => setEditandoAbierto(p)}>Editar</button>}
                     {p.oculto
                       ? <button className="secundario" onClick={() => actuar(() => mostrarProyecto(p.id), 'Proyecto de vuelta en la vitrina.')}>Mostrar</button>
                       : <button className="secundario" onClick={() => setOcultando(p)}>Ocultar</button>}
@@ -221,6 +245,15 @@ function ModerarProyectos() {
             setOcultando(null)
             actuar(() => ocultarProyecto(ocultando.id, motivo), 'Proyecto oculto. La dueña recibe un aviso con el motivo.')
           }}
+        />
+      )}
+
+      {editandoAbierto && (
+        <FormularioProyecto
+          abierto
+          proyecto={editandoAbierto.id ? editandoAbierto : null}
+          alGuardar={guardarAbierto}
+          alCerrar={() => setEditandoAbierto(null)}
         />
       )}
 

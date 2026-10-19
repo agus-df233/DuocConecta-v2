@@ -26,7 +26,10 @@ public record ProyectoRespuesta(
         Instant fechaCreacion,
         // Un proyecto oculto solo lo ven su dueña y el administrador, así que el motivo no se filtra.
         boolean oculto,
-        String motivoOcultamiento
+        String motivoOcultamiento,
+        // Abierto: publicado por el administrador, solo comentarios. La carrera solo viene en estos.
+        boolean abierto,
+        String carrera
 ) {
     /**
      * Arma la respuesta a partir de la entidad.
@@ -48,6 +51,7 @@ public record ProyectoRespuesta(
                 r.getEstado(), r.getVisibilidad(),
                 List.copyOf(r.getColaboradoresIds()),
                 r.getAdjuntos().stream().map(a -> AdjuntoRespuesta.desdeEntidad(a, urlDeS3)).toList(),
-                cantidadComentarios, r.getFechaCreacion(), r.isOculto(), r.getMotivoOcultamiento());
+                cantidadComentarios, r.getFechaCreacion(), r.isOculto(), r.getMotivoOcultamiento(),
+                r.isAbierto(), r.getCarrera());
     }
 }

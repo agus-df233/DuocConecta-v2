@@ -58,6 +58,23 @@ public class ClienteProyectos {
         }
     }
 
+    /**
+     * Si el proyecto es abierto, es decir, si se puede comentar pero no recibe solicitudes de
+     * colaboración. Si no existe o no se puede ver, responde false: esa validación es de ms-contacto.
+     */
+    public boolean esAbierto(UUID id) {
+        try {
+            ProyectoRespuesta proyecto = cliente.get()
+                    .uri(RUTA + "/{id}", id)
+                    .header(HttpHeaders.AUTHORIZATION, usuarioActual.cabeceraAuthorization())
+                    .retrieve()
+                    .body(ProyectoRespuesta.class);
+            return proyecto != null && proyecto.abierto();
+        } catch (HttpClientErrorException ignorada) {
+            return false;
+        }
+    }
+
     /** Proyectos que la persona autenticada tiene permitido ver. */
     public List<ProyectoRespuesta> listar() {
         List<ProyectoRespuesta> respuesta = cliente.get()

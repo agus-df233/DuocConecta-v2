@@ -1,17 +1,18 @@
 // Ventana para publicar o editar un proyecto: el mismo formulario en los dos casos.
-// Valida antes de enviar, para no depender de un 400 del servidor.
+// Valida antes de enviar, para no depender de un 400 del servidor. Con `abierto`, es el formulario
+// del administrador para los proyectos abiertos: sin visibilidad y con una carrera obligatoria.
 import { useState } from 'react'
 import AdjuntosProyecto from './AdjuntosProyecto'
-import { ESTADOS, HERRAMIENTAS_SUGERIDAS, SEDES } from './catalogo'
+import { ESCUELAS, ESTADOS, HERRAMIENTAS_SUGERIDAS, SEDES } from './catalogo'
 import Ventana from './Ventana'
 
 /** Un proyecto nuevo empieza público y buscando equipo, que es el caso más común. */
 const VACIO = {
   nombre: '', resumen: '', descripcion: '', urlRepositorio: '', sede: SEDES[0],
-  herramientas: [], estado: 'BUSCANDO_EQUIPO', visibilidad: 'PUBLICO', adjuntos: [],
+  herramientas: [], estado: 'BUSCANDO_EQUIPO', visibilidad: 'PUBLICO', adjuntos: [], carrera: '',
 }
 
-export default function FormularioProyecto({ proyecto, alGuardar, alCerrar }) {
+export default function FormularioProyecto({ proyecto, abierto = false, alGuardar, alCerrar }) {
   const [datos, setDatos] = useState({ ...VACIO, ...(proyecto ?? {}) })
   const [errores, setErrores] = useState({})
   const [textos, setTextos] = useState({})   // texto crudo de los campos de lista
@@ -65,6 +66,8 @@ export default function FormularioProyecto({ proyecto, alGuardar, alCerrar }) {
     if (!(datos.nombre ?? '').trim()) fallos.nombre = 'Ponle un nombre al proyecto.'
     if (!resumen.trim()) fallos.resumen = 'El resumen es lo único que se lee en la tarjeta.'
     if (resumen.length > 200) fallos.resumen = 'El resumen es de una línea: hasta 200 caracteres.'
+    // En un proyecto abierto la carrera es la que se muestra y la que usan los filtros de la vitrina.
+    if (abierto && !datos.carrera) fallos.carrera = 'Elige la carrera: es la que se muestra en la tarjeta.'
     if (Object.keys(fallos).length > 0) { setErrores(fallos); return }
 
     setGuardando(true)
@@ -76,8 +79,14 @@ export default function FormularioProyecto({ proyecto, alGuardar, alCerrar }) {
   }
 
   return (
-    <Ventana titulo={editando ? 'Editar proyecto' : 'Publicar un proyecto'} alCerrar={alCerrar}>
+    <Ventana titulo={titulo(abierto, editando)} alCerrar={alCerrar}>
       <form onSubmit={enviar}>
+        {abierto && (
+          <p className="ayuda nota-abierto">
+            Se muestra como <strong>Publicado por DuocConecta</strong>. Se puede comentar, pero no recibe
+            solicitudes de colaboración.
+          </p>
+        )}
         <label>
           Nombre *
           <input maxLength={150} placeholder="Nombre del proyecto" {...campo('nombre')} />
@@ -132,13 +141,28 @@ export default function FormularioProyecto({ proyecto, alGuardar, alCerrar }) {
             </select>
           </label>
 
-          <label>
-            Visibilidad
-            <select {...campo('visibilidad')}>
-              <option value="PUBLICO">Visible en la vitrina</option>
-              <option value="PRIVADO">Solo para mí</option>
-            </select>
-          </label>
+          {abierto ? (
+            <label>
+              Carrera *
+              <select {...campo('carrera')}>
+                <option value="">Elige una carrera</option>
+                {ESCUELAS.map((e) => (
+                  <optgroup key={e.nombre} label={e.nombre}>
+                    {e.carreras.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+              {errores.carrera && <span id="error-carrera" className="mensaje-campo" role="alert">{errores.carrera}</span>}
+            </label>
+          ) : (
+            <label>
+              Visibilidad
+              <select {...campo('visibilidad')}>
+                <option value="PUBLICO">Visible en la vitrina</option>
+                <option value="PRIVADO">Solo para mí</option>
+              </select>
+            </label>
+          )}
         </div>
 
         <label>
@@ -160,4 +184,10 @@ export default function FormularioProyecto({ proyecto, alGuardar, alCerrar }) {
       </form>
     </Ventana>
   )
+}
+
+/** El título de la ventana según el tipo de proyecto y si se está creando o editando. */
+function titulo(abierto, editando) {
+  if (abierto) return editando ? 'Editar proyecto abierto' : 'Publicar proyecto abierto'
+  return editando ? 'Editar proyecto' : 'Publicar un proyecto'
 }

@@ -56,13 +56,15 @@ class AdministracionBffTests {
     }
 
     @Test
-    @DisplayName("El resumen cuenta los proyectos por carrera y no reenvía los oid de las dueñas")
+    @DisplayName("El resumen cuenta por carrera, suma los proyectos abiertos y no reenvía los oid de las dueñas")
     void resumenPorCarrera() throws Exception {
         when(clienteUsuarios.estadisticas()).thenReturn(new EstadisticasUsuarios(3, 2,
                 List.of(new Conteo("ESTUDIANTE", 3)), List.of(new Conteo("Informática", 2)), List.of()));
         when(clienteProyectos.estadisticas()).thenReturn(new EstadisticasProyectos(6, 4, 1, 2, 9,
                 List.of(new Conteo("PUBLICO", 5)), List.of(), List.of(),
-                List.of(new Conteo("oid-a", 3), new Conteo("oid-b", 2), new Conteo("oid-oculta", 1))));
+                List.of(new Conteo("oid-a", 3), new Conteo("oid-b", 2), new Conteo("oid-oculta", 1)),
+                // Dos proyectos abiertos, ya contados por la carrera que eligió el administrador.
+                2, List.of(new Conteo("Informática", 2))));
         when(clienteUsuarios.buscarAutorPorOid("oid-a")).thenReturn(new Autor("A", "Informática", "Viña del Mar"));
         when(clienteUsuarios.buscarAutorPorOid("oid-b")).thenReturn(new Autor("B", "Informática", "Viña del Mar"));
         when(clienteUsuarios.buscarAutorPorOid("oid-oculta")).thenReturn(Autor.DESCONOCIDO);
@@ -73,7 +75,7 @@ class AdministracionBffTests {
                 .andExpect(jsonPath("$.comunidad.total").value(3))
                 .andExpect(jsonPath("$.vitrina.ocultosPorModeracion").value(1))
                 .andExpect(jsonPath("$.vitrina.porCarrera[0].clave").value("Informática"))
-                .andExpect(jsonPath("$.vitrina.porCarrera[0].cantidad").value(5))
+                .andExpect(jsonPath("$.vitrina.porCarrera[0].cantidad").value(7))
                 .andExpect(jsonPath("$.vitrina.porCarrera[1].clave").value("Perfil oculto o sin carrera"))
                 .andExpect(jsonPath("$..porPropietario").doesNotExist());
     }

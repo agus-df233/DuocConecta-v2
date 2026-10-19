@@ -67,6 +67,17 @@ export const publicarProyecto = (proyecto) =>
 export const editarProyecto = (id, proyecto) =>
   pedir(`/api/v1/proyectos/${id}`, { method: 'PUT', body: JSON.stringify(proyecto) })
 
+/**
+ * Publica un proyecto abierto (solo ADMINISTRADOR): sale como "Publicado por DuocConecta", se puede
+ * comentar y no recibe solicitudes de colaboración.
+ */
+export const publicarProyectoAbierto = (proyecto) =>
+  pedir('/api/v1/proyectos/admin/abiertos', { method: 'POST', body: JSON.stringify(proyecto) })
+
+/** Edita un proyecto abierto (solo ADMINISTRADOR). */
+export const editarProyectoAbierto = (id, proyecto) =>
+  pedir(`/api/v1/proyectos/admin/abiertos/${id}`, { method: 'PUT', body: JSON.stringify(proyecto) })
+
 /** Pide autorización para subir un archivo. Devuelve la clave y la URL firmada. */
 export const firmarAdjunto = (archivo) =>
   pedir('/api/v1/proyectos/adjuntos/firma', {

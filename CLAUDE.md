@@ -401,6 +401,7 @@ Ver `README.md` para las variables de entorno y `docs/azure-entra-id.md` para co
 | `GET /api/v1/proyectos/{id}` | Detalle de un proyecto |
 | `PUT /api/v1/proyectos/{id}` | Edita o cambia la visibilidad; solo el propietario (HU-11) |
 | `DELETE /api/v1/proyectos/{id}` | Lo borra; solo el propietario |
+| `POST /api/v1/proyectos/admin/abiertos` · `PUT …/abiertos/{id}` | Solo ADMINISTRADOR: publica o edita un **proyecto abierto** (ver "Modelo de proyecto") |
 | `GET /api/v1/proyectos/{id}/comentarios` | Hilo de comentarios |
 | `POST /api/v1/proyectos/{id}/comentarios` | Comenta; comentar no comparte datos de contacto |
 | `POST /api/v1/colaboraciones` | Pide contacto a otra persona |
@@ -414,7 +415,7 @@ Ver `README.md` para las variables de entorno y `docs/azure-entra-id.md` para co
 | Ruta del BFF | Por qué existe |
 |---|---|
 | `GET /api/v1/bff/mi-perfil` | Junta el perfil y las redes en una sola llamada |
-| `GET /api/v1/bff/vitrina` | Suma a cada proyecto **quién lo publicó** (nombre, carrera, sede), que ms-proyectos no sabe. Es lo que permite filtrar la vitrina por carrera |
+| `GET /api/v1/bff/vitrina` | Suma a cada proyecto **quién lo publicó** (nombre, carrera, sede), que ms-proyectos no sabe. Es lo que permite filtrar la vitrina por carrera. En los **abiertos** el autor es `DuocConecta` con la carrera elegida, sin consultar el perfil del admin |
 | `GET`/`POST /api/v1/bff/vitrina/{id}/comentarios` | Suma el nombre de quien escribió cada comentario |
 | `/api/v1/bff/colaboraciones/**` | Al aceptar, el BFF lee el perfil de quien acepta y arma con él los datos de contacto, en vez de pedirle que los escriba a mano |
 | `GET /api/v1/bff/admin/resumen` | Dashboard de administración: junta las estadísticas de ms-usuarios y ms-proyectos y cuenta los proyectos **por carrera** con `ResolvedorAutores`. No reenvía los `oid` de las dueñas |
@@ -432,6 +433,15 @@ alguien se ocultara.
 ### Modelo de proyecto
 
 `resumen` es la línea que se lee en la tarjeta; `descripcion` es el detalle completo.
+
+**Proyectos abiertos** (`abierto`, `carrera`, migración `V5`): los publica el ADMINISTRADOR para que
+la vitrina tenga más proyectos a la vista. Siempre públicos y sin colaboradores; la tarjeta dice
+"Publicado por DuocConecta" con la carrera y la sede que eligió el admin (así los filtros por carrera
+siguen sirviendo). **Solo se comentan**: el BFF responde 400 si se pide colaborar en uno, el `PUT`
+normal y agregar colaboradores responden 409, y comentar publica `proyecto.comentado` **sin
+destinatario** (no hay aviso; la auditoría lo registra igual). No aparecen en "Mis proyectos" del
+admin, se editan desde Administración, y las estadísticas los cuentan aparte (`porCarreraAbiertos`).
+
 `herramientas` es texto libre y se llama así —no "stack"— a propósito: DuocConecta es de toda la
 comunidad, y un proyecto de Diseño lista Figma y uno de Administración lista Excel igual que uno
 de Informática lista React. Una lista cerrada dejaría carreras fuera.

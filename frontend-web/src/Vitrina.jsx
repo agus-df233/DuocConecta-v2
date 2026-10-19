@@ -224,7 +224,7 @@ export default function Vitrina({ foco, alUsarFoco, escondidos, alEsconder }) {
             <TarjetaProyecto
               key={p.id}
               proyecto={p}
-              esMio={p.propietarioId === miOid}
+              esMio={esPropio(p, miOid)}
               esNuevo={nuevos.has(p.id)}
               estadoSolicitud={estadoPorProyecto.get(p.id)}
               alAbrir={() => setAbierto({ id: p.id })}
@@ -240,7 +240,7 @@ export default function Vitrina({ foco, alUsarFoco, escondidos, alEsconder }) {
       {proyectoAbierto && (
         <DetalleProyecto
           proyecto={proyectoAbierto}
-          esMio={proyectoAbierto.propietarioId === miOid}
+          esMio={esPropio(proyectoAbierto, miOid)}
           estadoSolicitud={estadoPorProyecto.get(proyectoAbierto.id)}
           enfocarComentario={abierto.comentar}
           alColaborar={() => { setPidiendoA(proyectoAbierto); setAbierto(null) }}
@@ -324,4 +324,12 @@ function filtrar(proyectos, filtros) {
       && (!filtros.herramienta || p.herramientas?.includes(filtros.herramienta))
       && (!filtros.estado || p.estado === filtros.estado)
   })
+}
+
+/**
+ * Un proyecto es propio si lo publicó quien mira. Los abiertos nunca lo son, ni para el
+ * administrador que los subió: se editan desde Administración y en la vitrina se ven como de DuocConecta.
+ */
+function esPropio(proyecto, miOid) {
+  return !proyecto.abierto && proyecto.propietarioId === miOid
 }

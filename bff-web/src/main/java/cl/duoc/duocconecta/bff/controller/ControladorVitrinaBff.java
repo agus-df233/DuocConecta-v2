@@ -4,6 +4,7 @@ import cl.duoc.duocconecta.bff.dto.ComentarioDatos;
 import cl.duoc.duocconecta.bff.dto.ComentarioRespuesta;
 import cl.duoc.duocconecta.bff.dto.ProyectoRespuesta;
 import cl.duoc.duocconecta.bff.service.ClienteProyectos;
+import cl.duoc.duocconecta.bff.dto.Autor;
 import cl.duoc.duocconecta.bff.service.ResolvedorAutores;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -67,7 +68,10 @@ public class ControladorVitrinaBff {
     public ResponseEntity<List<ProyectoRespuesta>> listar() {
         ResolvedorAutores.Consulta consulta = resolvedorAutores.abrir();
         return ResponseEntity.ok(clienteProyectos.listar().stream()
-                .map(p -> p.conAutor(consulta.autorDe(p.propietarioId())))
+                // Un proyecto abierto es de la plataforma: no se busca el perfil de quien lo subió.
+                .map(p -> p.conAutor(p.abierto()
+                        ? Autor.plataforma(p.carrera(), p.sede())
+                        : consulta.autorDe(p.propietarioId())))
                 .toList());
     }
 

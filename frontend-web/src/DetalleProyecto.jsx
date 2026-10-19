@@ -106,8 +106,17 @@ export default function DetalleProyecto({
             )}
           </div>
 
-          {/* Lo propio se administra; lo ajeno se contacta. */}
-          {esMio ? (
+          {/* Lo propio se administra; lo ajeno se contacta. Lo abierto solo se comenta. */}
+          {proyecto.abierto ? (
+            <div className="consentimiento">
+              <h4><span className="candado" aria-hidden="true" />Proyecto abierto</h4>
+              <p>
+                Lo publicó DuocConecta para mostrar lo que se puede hacer en la comunidad. Puedes
+                comentarlo, pero no recibe solicitudes de colaboración.
+              </p>
+              <button type="button" className="secundario ancho" onClick={alCompartir}>Compartir proyecto</button>
+            </div>
+          ) : esMio ? (
             <div className="consentimiento">
               <h4><span className="candado" aria-hidden="true" />Este proyecto es tuyo</h4>
               <p>

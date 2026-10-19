@@ -98,6 +98,18 @@ public class Proyecto {
     @Column(name = "ocultado_en")
     private Instant ocultadoEn;
 
+    /**
+     * Proyecto abierto: lo publica el administrador, se puede comentar y no recibe solicitudes de
+     * colaboración. Se muestra como "Publicado por DuocConecta".
+     */
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean abierto = false;
+
+    /** Carrera de un proyecto abierto, elegida por el administrador. En los demás va vacía. */
+    @Column(length = 120)
+    private String carrera;
+
     @PrePersist
     void alPersistir() {
         this.fechaCreacion = Instant.now();
