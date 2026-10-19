@@ -15,7 +15,7 @@
 #   ./infra/aws.sh urls        Muestra las URLs del ALB y del API Gateway.
 #   ./infra/aws.sh mensajeria  Crea lo que falte del tópico SNS, las colas SQS y sus DLQ (EP2). Idempotente.
 #   ./infra/aws.sh cognito     Login con Google: user pool, dominio, app client y Google como IdP. Idempotente.
-#   ./infra/aws.sh rabbitmq    RabbitMQ en una EC2: clúster de 2 nodos con docker-compose. Idempotente.
+#   ./infra/aws.sh rabbitmq    RabbitMQ en una EC2: un nodo con docker-compose. Idempotente.
 #
 # Las credenciales del lab van en ~/.aws/credentials (panel "AWS Details"), nunca en el repo:
 # rotan en cada sesión.
@@ -109,7 +109,7 @@ datos_cognito() {
   COGNITO_ISSUER_URI="https://cognito-idp.$REGION.amazonaws.com/$pool"
 }
 
-# RabbitMQ en la nube: una EC2 con el clúster de 2 nodos en docker-compose (Amazon MQ no está
+# RabbitMQ en la nube: una EC2 con un nodo en docker-compose (Amazon MQ no está
 # habilitado en el lab). Sin la EC2, la plataforma funciona solo con SNS/SQS.
 RABBIT_NOMBRE="$PROYECTO-rabbitmq"
 # Versión fija de docker compose en la EC2: con "latest", dos despliegues podían terminar distintos.
@@ -130,7 +130,7 @@ datos_rabbit() {
   fi
   local ip; ip=$(aws ec2 describe-instances --instance-ids "$id" --query 'Reservations[0].Instances[0].PrivateIpAddress' --output text)
   SECRETO_RABBIT_ARN=$(aws secretsmanager describe-secret --secret-id "$RABBIT_SECRETO" --query ARN --output text)
-  RABBITMQ_ADDRESSES="$ip:5672,$ip:5673"
+  RABBITMQ_ADDRESSES="$ip:5672"
   RABBITMQ_HABILITADA=true
 }
 
@@ -1147,11 +1147,11 @@ cmd_cognito() {
 }
 
 # ---------------------------------------------------------------------------
-# rabbitmq — el segundo broker en la nube: una EC2 con el clúster de 2 nodos en docker-compose.
+# rabbitmq — el segundo broker en la nube: una EC2 con un nodo en docker-compose.
 # Idempotente. Amazon MQ no está habilitado en el lab, por eso va en EC2.
 #
-#   - Credenciales y cookie de Erlang en Secrets Manager ($RABBIT_SECRETO): nunca en el repo.
-#   - 5672/5673 (AMQP) solo para las tareas de Fargate; 15672 (consola) solo para tu IP.
+#   - Credenciales en Secrets Manager ($RABBIT_SECRETO): nunca en el repo.
+#   - 5672 (AMQP) solo para las tareas de Fargate; 15672 (consola) solo para tu IP.
 #   - Se entra por SSM (LabInstanceProfile), sin llaves SSH.
 # ---------------------------------------------------------------------------
 cmd_rabbitmq() {
@@ -1160,8 +1160,7 @@ cmd_rabbitmq() {
 
   azul "1/4 · Credenciales en Secrets Manager"
   if ! aws secretsmanager describe-secret --secret-id "$RABBIT_SECRETO" >/dev/null 2>&1; then
-    secreto=$(jq -nc --arg c "$(openssl rand -hex 16)" --arg k "$(openssl rand -hex 24)" \
-      '{usuario:"duocconecta", clave:$c, cookie:$k}')
+    secreto=$(jq -nc --arg c "$(openssl rand -hex 16)" '{usuario:"duocconecta", clave:$c}')
     aws secretsmanager create-secret --name "$RABBIT_SECRETO" --secret-string "$secreto" >/dev/null
     unset secreto
   fi
@@ -1175,9 +1174,7 @@ cmd_rabbitmq() {
     sg=$(aws ec2 create-security-group --group-name "$RABBIT_NOMBRE" --description "RabbitMQ de DuocConecta" \
       --vpc-id "$vpc" --query GroupId --output text)
   fi
-  for p in 5672 5673; do
-    aws ec2 authorize-security-group-ingress --group-id "$sg" --protocol tcp --port "$p" --source-group "$SG_TAREAS" >/dev/null 2>&1 || true
-  done
+  aws ec2 authorize-security-group-ingress --group-id "$sg" --protocol tcp --port 5672 --source-group "$SG_TAREAS" >/dev/null 2>&1 || true
   mi_ip=$(curl -s https://checkip.amazonaws.com | tr -d '\n')
   aws ec2 authorize-security-group-ingress --group-id "$sg" --protocol tcp --port 15672 --cidr "$mi_ip/32" >/dev/null 2>&1 || true
   ok "$RABBIT_NOMBRE: AMQP solo desde las tareas · consola solo desde $mi_ip"
@@ -1212,8 +1209,8 @@ mkdir -p /opt/rabbitmq && cd /opt/rabbitmq
 echo '$(base64 < "$RAIZ/docker/rabbitmq/docker-compose.yml" | tr -d '\n')' | base64 -d > docker-compose.yml
 echo '$(base64 < "$RAIZ/docker/rabbitmq/rabbitmq.conf" | tr -d '\n')' | base64 -d > rabbitmq.conf
 S=\$(aws secretsmanager get-secret-value --region $REGION --secret-id $RABBIT_SECRETO --query SecretString --output text)
-printf 'RABBITMQ_USUARIO=%s\nRABBITMQ_CLAVE=%s\nRABBITMQ_COOKIE=%s\n' \\
-  "\$(echo "\$S" | jq -r .usuario)" "\$(echo "\$S" | jq -r .clave)" "\$(echo "\$S" | jq -r .cookie)" > .env
+printf 'RABBITMQ_USUARIO=%s\nRABBITMQ_CLAVE=%s\n' \\
+  "\$(echo "\$S" | jq -r .usuario)" "\$(echo "\$S" | jq -r .clave)" > .env
 chmod 600 .env
 docker compose up -d
 EOU
@@ -1227,13 +1224,13 @@ EOU
   fi
   aws ec2 start-instances --instance-ids "$id" >/dev/null 2>&1 || true
   aws ec2 wait instance-running --instance-ids "$id"
-  ok "EC2 $id encendida (el clúster tarda ~2 min en formarse la primera vez)"
+  ok "EC2 $id encendida (RabbitMQ tarda ~2 min en quedar listo la primera vez)"
 
   azul "4/4 · Datos"
   local ip_pub ip_priv
   ip_pub=$(aws ec2 describe-instances --instance-ids "$id" --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
   ip_priv=$(aws ec2 describe-instances --instance-ids "$id" --query 'Reservations[0].Instances[0].PrivateIpAddress' --output text)
-  echo "  AMQP (tareas): $ip_priv:5672,$ip_priv:5673"
+  echo "  AMQP (tareas): $ip_priv:5672"
   echo "  Consola:       http://$ip_pub:15672   (usuario y clave en Secrets Manager: $RABBIT_SECRETO)"
   echo "  Entrar:        aws ssm start-session --target $id   →   sudo docker compose -f /opt/rabbitmq/docker-compose.yml ps"
 }

@@ -26,7 +26,7 @@ Todo eso sigue vigente en la v2 y **no se toca**: la mensajería se suma encima.
 **Mensajería asíncrona** sin afectar la lógica existente: colas con DLQ, productores y
 consumidores con confirmación explícita, y un **microservicio administrador** con API REST. El
 plataforma usa **dos brokers a la vez**: **Amazon SQS** con **SNS** como exchange topic, y
-**RabbitMQ** (clúster de 2 nodos). Ver §12.
+**RabbitMQ** (un nodo). Ver §12.
 
 Este repositorio nació como **copia del código de la EP1** (rama `developer`, `1b205d2`), sin su
 historial ni sus remotes. El repositorio de la EP1 no se modifica.
@@ -499,7 +499,7 @@ Navegador          API Gateway HTTP API      ALB          ECS Fargate — 1 tare
                                                           ├── ms-notificaciones :8084  ← consume SQS y RabbitMQ
                                                           └── ms-mensajeria     :8085  → administra los dos brokers
 
-EC2 duocconecta-rabbitmq (t3.small) — docker-compose: rabbit1 :5672 + rabbit2 :5673, clúster de 2 nodos
+EC2 duocconecta-rabbitmq (t3.small) — docker-compose: un nodo de RabbitMQ en :5672
 ```
 
 ms-mensajeria va en un **servicio de ECS aparte** (`SERVICIOS_APARTE`): un servicio admite como
@@ -703,7 +703,8 @@ cada cola ─(rechazo o x-delivery-limit)─► DLX direct duocconecta.dlx ─�
   (`maxEntregas - 1`). Con 3 se ven 4 intentos antes de la DLQ.
 - Una cola ya declarada **no acepta otros argumentos**: RabbitMQ responde `PRECONDITION_FAILED`.
   Cambiar el límite exige borrar la cola (en local, con `rabbitmqctl delete_queue`).
-- Solo colas **quorum** (`default_queue_type = quorum`): se replican en los dos nodos.
+- Solo colas **quorum** (`default_queue_type = quorum`), aunque haya un nodo: son las únicas que
+  admiten `x-delivery-limit`. Con una clásica, lo que falla se reintentaría para siempre.
 - Credenciales y cookie de Erlang en Secrets Manager (`duocconecta/rabbitmq`); el puerto AMQP solo
   acepta a las tareas de Fargate y la consola, solo la IP de quien corrió `make rabbitmq`.
 - `management.health.rabbit.enabled: false`: un RabbitMQ caído no debe hacer que el ALB dé por
@@ -711,6 +712,9 @@ cada cola ─(rechazo o x-delivery-limit)─► DLX direct duocconecta.dlx ─�
 - `spring.rabbitmq.connection-timeout: 2s`: se publica después del commit **en el hilo de la
   petición**. Con el valor por defecto (60 s por dirección), la EC2 apagada dejaba colgada cada
   escritura hasta que el API Gateway cortaba a los 30 s, aunque el cambio ya estuviera guardado.
-- **Límite conocido del clúster de 2 nodos:** una cola quorum necesita mayoría (2 de 2). Replica los
-  datos en los dos nodos, pero si uno cae las colas dejan de aceptar mensajes hasta que vuelve; en
-  ese lapso los eventos siguen llegando por SNS/SQS. Tolerar la caída de un nodo exige un tercero.
+- **Un nodo (decisión del equipo, oct-2026).** La pauta de la
+  presentación pide "dos nodos RabbitMQ en clúster"; el equipo lo cubre con **los dos brokers**
+  (SNS/SQS y RabbitMQ), que es lo que pidió el docente. Hubo un clúster de 2 nodos en la misma EC2 y
+  se quitó: con quorum, 2 nodos necesitan mayoría 2 de 2, así que la caída de cualquiera detenía las
+  colas igual que con uno, con el doble de piezas. Con RabbitMQ caído, los eventos siguen llegando
+  por SNS/SQS. Alta disponibilidad real exigiría 3 nodos en 3 zonas. **No volver a armar el clúster.**

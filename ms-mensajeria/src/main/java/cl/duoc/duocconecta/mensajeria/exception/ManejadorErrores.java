@@ -51,7 +51,7 @@ public class ManejadorErrores extends ManejadorErroresBase {
     public ProblemDetail manejarSinRabbit(RuntimeException excepcion) {
         log.warn("RabbitMQ no disponible: {}", excepcion.getMessage());
         return problema(HttpStatus.SERVICE_UNAVAILABLE, "RabbitMQ no disponible",
-                "No se pudo conectar con RabbitMQ. Revisa que el clúster esté arriba.");
+                "No se pudo conectar con RabbitMQ. Revisa que el nodo esté arriba.");
     }
 
     /** RabbitMQ rechazó la operación (por ejemplo, declarar una cola que existe con otros argumentos). */

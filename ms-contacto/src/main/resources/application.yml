@@ -6,9 +6,9 @@ server:
   port: 8083
 
 spring:
-  # RabbitMQ (EP2), el segundo broker: clúster de 2 nodos. Credenciales por variable de entorno.
+  # RabbitMQ (EP2), el segundo broker: un nodo. Credenciales por variable de entorno.
   rabbitmq:
-    addresses: ${RABBITMQ_ADDRESSES:localhost:5672,localhost:5673}
+    addresses: ${RABBITMQ_ADDRESSES:localhost:5672}
     username: ${RABBITMQ_USUARIO:duocconecta}
     password: ${RABBITMQ_CLAVE:duocconecta}
     # Corto a propósito: se publica después del commit en el mismo hilo de la petición. Con el

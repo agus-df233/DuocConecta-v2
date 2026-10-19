@@ -73,7 +73,7 @@ En el orden en que conviene recorrerlos: del frontend hacia adentro.
 | `ms-mensajeria` | 8085 | **EP2.** Administra colas, tópicos y suscripciones (SNS/SQS) y colas, exchanges y bindings (RabbitMQ). Sin base de datos |
 | `common-seguridad` | — | Librería compartida: validación de JWT (audiencia, roles, dominios), manejo de errores y registro de peticiones |
 | `common-eventos` | — | **EP2.** Contrato de los eventos, publicación en SNS y en RabbitMQ, y topología de colas |
-| `docker` | — | Dockerfile de los seis servicios, inicialización de PostgreSQL y el clúster de RabbitMQ (`docker/rabbitmq`) |
+| `docker` | — | Dockerfile de los seis servicios, inicialización de PostgreSQL y RabbitMQ (`docker/rabbitmq`) |
 | `infra` | — | Despliegue en AWS: `aws.sh` y la definición de la tarea de ECS |
 
 ## Arquitectura
@@ -105,7 +105,7 @@ ahí no hay nada que componer.
 
 ```bash
 cp .env.example .env          # completa AZURE_TENANT_ID y AZURE_CLIENT_ID
-docker compose up -d          # PostgreSQL y RabbitMQ (2 nodos)
+docker compose up -d          # PostgreSQL y RabbitMQ
 
 export JAVA_HOME=$(/usr/libexec/java_home -v 21)   # macOS
 mvn clean install
@@ -143,7 +143,7 @@ sube al repositorio.**
 | `CORREOS_PERMITIDOS` | No | **EP2.** Cuentas externas que entran con Google y su rol, en la forma `correo=ROL` separados por coma (por ejemplo `ana@gmail.com=ESTUDIANTE`). Fuera de la lista, un dominio externo sigue recibiendo 403. No acepta `ADMINISTRADOR`: para eso está la variable anterior |
 | `CONSUMIDORES_ACTIVOS` | No | **EP2.** En `false`, ms-notificaciones no arranca sus consumidores (sin credenciales de AWS ni RabbitMQ) |
 | `RABBITMQ_HABILITADA` | No | **EP2.** Por defecto `true`. En `false`, solo SNS/SQS: no se publica ni se consume en RabbitMQ |
-| `RABBITMQ_ADDRESSES` · `RABBITMQ_USUARIO` · `RABBITMQ_CLAVE` | No | **EP2.** Nodos del clúster y credenciales. Por defecto, el clúster local (`localhost:5672,localhost:5673`). En la nube, la clave sale de Secrets Manager |
+| `RABBITMQ_ADDRESSES` · `RABBITMQ_USUARIO` · `RABBITMQ_CLAVE` | No | **EP2.** Dirección del nodo y credenciales. Por defecto, el nodo local (`localhost:5672`). En la nube, la clave sale de Secrets Manager |
 
 Las credenciales de AWS **no** son variables: en local salen de `~/.aws/credentials` (panel
 *AWS Details* del Learner Lab) y en Fargate de `LabRole`.
@@ -256,7 +256,7 @@ datos de contacto, y el `X-Request-Id` viaja con cada mensaje.
 
 ```bash
 make mensajeria   # crea lo que falte del tópico, las colas y sus DLQ (idempotente, nunca borra)
-make rabbitmq     # EC2 con el clúster de RabbitMQ de 2 nodos (idempotente)
+make rabbitmq     # EC2 con RabbitMQ, un nodo (idempotente)
 ```
 
 El detalle (catálogo de eventos, tabla de confirmación y trampas) está en
@@ -284,7 +284,7 @@ se portó aquí sobre la misma interfaz `PublicadorEventos` y la misma tabla de 
 
 | | Amazon SNS + SQS | RabbitMQ |
 |---|---|---|
-| Dónde corre | Servicio administrado de AWS | Clúster de 2 nodos con `docker-compose`: en local y en una EC2 (Amazon MQ no está habilitado en el lab) |
+| Dónde corre | Servicio administrado de AWS | Un nodo con `docker-compose`: en local y en una EC2 (Amazon MQ no está habilitado en el lab) |
 | Exchange | Tópico SNS `duocconecta-eventos` | Exchange `topic` `duocconecta.eventos`; DLX `direct` `duocconecta.dlx` |
 | Binding | Suscripción con filtro por prefijo del atributo `tipo` | Binding con routing key `proyecto.#`, `colaboracion.#` y `#` |
 | Consumidor | `@SqsListener`, confirmación `MANUAL` | `@RabbitListener`, `ackMode = "MANUAL"` |

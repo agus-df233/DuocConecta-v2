@@ -25,7 +25,7 @@ import org.springframework.context.annotation.Configuration;
  *  └─ routing key = nombre de la DLQ ─► …-descartes (una por cola)
  * </pre>
  *
- * <p>Las colas son <em>quorum</em>: se replican en los nodos del clúster y cuentan las entregas
+ * <p>Las colas son <em>quorum</em> aunque haya un solo nodo: son las que cuentan las entregas
  * ({@code x-delivery-limit}). Al pasar el límite, RabbitMQ manda el mensaje al DLX por su cuenta.</p>
  */
 @Configuration

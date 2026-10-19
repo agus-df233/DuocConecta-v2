@@ -4,7 +4,7 @@
 #   make verificar                    Qué habilita el lab de AWS. Correr primero.
 #   make crear                        Crea la infraestructura (ECR, ECS, RDS, ALB, API Gateway).
 #   make mensajeria                   Tópico SNS, colas SQS y DLQ de la EP2. Idempotente.
-#   make rabbitmq                     RabbitMQ en una EC2: clúster de 2 nodos. Idempotente.
+#   make rabbitmq                     RabbitMQ en una EC2: un nodo. Idempotente.
 #   make desplegar                    Construye las imágenes, las sube y actualiza el servicio.
 #   make desplegar SERVICIO=bff-web   Igual, pero sube solo ese servicio.
 #   make iniciar / make apagar        Prende y apaga las tareas. APAGAR al terminar la jornada.
@@ -28,7 +28,7 @@ crear:
 mensajeria:
 	./infra/aws.sh mensajeria
 
-# El segundo broker: EC2 con el clúster de 2 nodos de docker/rabbitmq. Idempotente.
+# El segundo broker: EC2 con el nodo de docker/rabbitmq. Idempotente.
 rabbitmq:
 	./infra/aws.sh rabbitmq
 
@@ -56,7 +56,7 @@ urls:
 
 # --- Desarrollo local ---
 local:
-	docker compose up -d   # Postgres y el clúster de RabbitMQ (2 nodos)
+	docker compose up -d   # Postgres y RabbitMQ
 	mvn -q clean install -DskipTests
 	@echo "Listo. Levanta los servicios con:"
 	@echo "  mvn -pl ms-usuarios spring-boot:run -Dspring-boot.run.profiles=dev"
