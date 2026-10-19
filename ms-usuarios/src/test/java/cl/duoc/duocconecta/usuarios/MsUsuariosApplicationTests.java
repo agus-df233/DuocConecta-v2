@@ -110,6 +110,31 @@ class MsUsuariosApplicationTests {
     }
 
     /**
+     * El mismo correo con otro {@code oid} (Microsoft y luego Google) es un 409 con el motivo, no un
+     * 500 por el índice único de correo.
+     */
+    @Test
+    @DisplayName("El mismo correo por el otro proveedor responde 409 y no crea un segundo perfil")
+    void mismoCorreoConOtroProveedorResponde409() throws Exception {
+        mockMvc.perform(get("/api/v1/usuarios/me").with(tokenDe("javiera.soto@duocuc.cl")))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/usuarios/me").with(jwt()
+                        .jwt(token -> token
+                                .claim("sub", "sub-cognito-javiera")
+                                .claim("email", "javiera.soto@duocuc.cl")
+                                .claim("name", "Javiera Soto"))
+                        .authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                                "ROLE_ESTUDIANTE"))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("otro inicio de sesión")));
+
+        // El perfil original sigue intacto para el primer proveedor.
+        mockMvc.perform(get("/api/v1/usuarios/me").with(tokenDe("javiera.soto@duocuc.cl")))
+                .andExpect(status().isOk());
+    }
+
+    /**
      * Un correo de un dominio que no es de Duoc recibe 403 aunque el token traiga rol.
      *
      * <p>Comprueba que la validación de dominio también vive en el servicio y no solo en la

@@ -107,6 +107,11 @@ public class ServicioUsuarios {
      * {@code oid_entra}. PostgreSQL deja abortada esa transacción, así que se reintenta en una nueva.
      */
     private Usuario crearPerfil(UsuarioActual.IdentidadUsuario identidad) {
+        // El mismo correo con otro oid es la misma persona entrando por el otro proveedor:
+        // sin esto, el índice único de correo terminaba en un 500.
+        if (repositorio.findByCorreo(identidad.correo()).isPresent()) {
+            throw new CorreoConOtraIdentidadException();
+        }
         Usuario nuevo = new Usuario(
                 identidad.oid(), identidad.nombre(), identidad.correo(), identidad.rol());
         // saveAndFlush: que el choque salte aquí y no más tarde, sin saber quién lo provocó.
