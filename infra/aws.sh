@@ -847,7 +847,9 @@ cmd_apigw() {
   # con nada y lo contesta el propio API Gateway en vez de terminar en S3.
   # DOS integraciones: la raíz al bucket pelado, y el resto arrastrando el path con {proxy}.
   # Sin eso, /assets/index-XXX.js devolvía el index.html y la aplicación no arrancaba.
-  integ=$(integracion "$sitio" "Frontend estatico en S3 - pagina de entrada")
+  # La raíz lleva la barra final: sin ella, la vuelta de Cognito (/?code=…) llegaba a S3 con la
+  # ruta vacía y S3 respondía 302 a su propio dominio http, donde MSAL no tiene crypto.
+  integ=$(integracion "$sitio/" "Frontend estatico en S3 - pagina de entrada")
   ruta 'GET /' "$integ"
 
   local integ_assets
